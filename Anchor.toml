@@ -1,0 +1,16 @@
+[features]
+seeds = false
+[programs.localnet]
+launchpad = "LPD1BCWvd499Rk7aG5zG8uieUTTqba1JaYkUpXjUN9q"
+[programs.devnet]
+launchpad = "LPD1BCWvd499Rk7aG5zG8uieUTTqba1JaYkUpXjUN9q"
+
+[registry]
+url = "https://anchor.projectserum.com"
+
+[provider]
+cluster = "devnet"
+wallet = "/home/ska/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
