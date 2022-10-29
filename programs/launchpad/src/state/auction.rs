@@ -1,6 +1,6 @@
-use {crate::math, anchor_lang::prelude::*};
+use anchor_lang::prelude::*;
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Default, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct BidderStats {
     pub fills_volume: u64,
     pub weighted_fills_sum: u128,
@@ -9,7 +9,7 @@ pub struct BidderStats {
     pub num_trades: u64,
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Default, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct AuctionStats {
     pub first_trade_time: i64,
     pub last_trade_time: i64,
@@ -19,7 +19,7 @@ pub struct AuctionStats {
     pub reg_bidders: BidderStats,
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Default, Debug)]
+#[derive(Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct CommonParams {
     pub name: String,
     pub description: String,
@@ -33,14 +33,14 @@ pub struct CommonParams {
     pub fill_limit_wl_address: u64,
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Default)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct PaymentParams {
     pub accept_sol: bool,
     pub accept_usdc: bool,
     pub accept_other_tokens: bool,
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Debug)]
 pub enum PricingModel {
     Fixed,
     DynamicDutchAuction,
@@ -52,7 +52,7 @@ impl Default for PricingModel {
     }
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Debug)]
 pub enum RepriceFunction {
     Linear,
 }
@@ -63,7 +63,7 @@ impl Default for RepriceFunction {
     }
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Debug)]
 pub enum AmountFunction {
     Fixed,
 }
@@ -74,7 +74,7 @@ impl Default for AmountFunction {
     }
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Default, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct PricingParams {
     pub custody: Pubkey,
     pub pricing_model: PricingModel,
@@ -88,7 +88,7 @@ pub struct PricingParams {
     pub tick_size: u64,
 }
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Default, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct AuctionToken {
     // Token ratios determine likelihood of getting a particular token if
     // multiple offered. If set to zero, then the available amount will be
@@ -119,24 +119,26 @@ pub struct Auction {
 
     // time of creation, also used as current wall clock time for testing
     pub creation_time: i64,
+    pub update_time: i64,
     pub bump: u8,
 }
 
 impl CommonParams {
-    pub fn validate(&self) -> bool {
+    pub fn validate(&self, curtime: i64) -> bool {
         (self.fill_limit_reg_address > 0 || self.fill_limit_wl_address > 0)
-            && ((end_time == 0 && start_time == 0)
-                || (end_time > start_time && end_time > self.get_time()))
-            && ((presale_end_time == 0 && presale_start_time == 0)
-                || (presale_end_time > presale_start_time
-                    && presale_end_time > self.get_time()
-                    && ((end_time == 0 && start_time == 0) || presale_end_time <= start_time)))
+            && ((self.end_time == 0 && self.start_time == 0)
+                || (self.end_time > self.start_time && self.end_time > curtime))
+            && ((self.presale_end_time == 0 && self.presale_start_time == 0)
+                || (self.presale_end_time > self.presale_start_time
+                    && self.presale_end_time > curtime
+                    && ((self.end_time == 0 && self.start_time == 0)
+                        || self.presale_end_time <= self.start_time)))
     }
 }
 
 impl PaymentParams {
     pub fn validate(&self) -> bool {
-        accept_sol || accept_usdc || accept_other_tokens
+        self.accept_sol || self.accept_usdc || self.accept_other_tokens
     }
 }
 
@@ -159,21 +161,16 @@ impl Auction {
     pub const LEN: usize = 8 + std::mem::size_of::<Auction>();
     pub const MAX_TOKENS: usize = 4;
 
-    pub fn validate(&self) -> bool {
-        self.name.len() >= 6
-            && self.common.validate()
+    pub fn validate(&self, current_time: i64) -> bool {
+        self.common.name.len() >= 6
+            && self.common.validate(current_time)
             && self.payment.validate()
             && self.pricing.validate()
     }
 
-    /// Checks if the auction is empty
-    pub fn is_empty(&self) -> bool {
-        self.tokens.balances.iter().all(|&e| e == 0)
-    }
-
     /// Checks if the auction is ended
-    pub fn is_ended(&self, current_time: i64) -> Result<bool> {
-        Ok(current_time >= self.common.end_time)
+    pub fn is_ended(&self, current_time: i64) -> bool {
+        current_time >= self.common.end_time
     }
 
     #[cfg(feature = "test")]
@@ -189,5 +186,13 @@ impl Auction {
         } else {
             Err(ProgramError::InvalidAccountData.into())
         }
+    }
+
+    pub fn get_auction_amount(&self, price: u64) -> Result<u64> {
+        Ok(0)
+    }
+
+    pub fn get_auction_price(&self, amount: u64) -> Result<u64> {
+        Ok(0)
     }
 }

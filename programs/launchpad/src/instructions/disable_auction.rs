@@ -1,7 +1,7 @@
 //! DisableAuction instruction handler
 
 use {
-    crate::{error::LaunchpadError},
+    crate::{state::auction::Auction, error::LaunchpadError},
     anchor_lang::prelude::*,
 };
 
@@ -13,7 +13,7 @@ pub struct DisableAuction<'info> {
     #[account(
         mut, 
         has_one = owner,
-        seeds = [b"auction", auction.name.as_bytes()],
+        seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
@@ -25,8 +25,8 @@ pub struct DisableAuctionParams {
 
 pub fn disable_auction(
     ctx: Context<DisableAuction>,
-    params: &DisableAuctionParams,
-) -> Result {
+    _params: &DisableAuctionParams,
+) -> Result<()> {
     let auction = ctx.accounts.auction.as_mut();
     auction.enabled = false;
 

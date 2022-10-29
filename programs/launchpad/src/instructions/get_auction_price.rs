@@ -1,17 +1,20 @@
 //! GetAuctionPrice instruction handler
 
-use {crate::state::auction::Auction, anchor_lang::prelude::*};
+use {
+    crate::state::{auction::Auction, launchpad::Launchpad},
+    anchor_lang::prelude::*,
+};
 
 #[derive(Accounts)]
 pub struct GetAuctionPrice<'info> {
     #[account()]
     pub user: Signer<'info>,
 
-    #[account(seeds = [b"launchpad"], bump = launchpad.bump)]
+    #[account(seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
-        seeds = [b"auction", auction.name.as_bytes()],
+        seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
@@ -24,7 +27,7 @@ pub struct GetAuctionPriceParams {
 
 pub fn get_auction_price(
     ctx: Context<GetAuctionPrice>,
-    _params: &GetAuctionPriceParams,
+    params: &GetAuctionPriceParams,
 ) -> Result<u64> {
-    Ok(ctx.auction.get_auction_price(amount)?)
+    Ok(ctx.accounts.auction.get_auction_price(params.amount)?)
 }

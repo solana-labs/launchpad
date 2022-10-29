@@ -20,6 +20,8 @@ pub enum LaunchpadError {
     InvalidPricingConfig,
     #[msg("Invalid token amount")]
     InvalidTokenAmount,
+    #[msg("Too many remaining accounts")]
+    TooManyAccountKeys,
     #[msg("New auctions are not allowed at this time")]
     NewAuctionsNotAllowed,
     #[msg("Bids are not allowed at this time")]
@@ -54,8 +56,6 @@ pub enum LaunchpadError {
     InsufficientAmount,
     #[msg("Bid amount is too large")]
     BidAmountTooLarge,
-    #[msg("Unexpected settlement error")]
-    SettlementError,
     #[msg("Bid price is too small")]
     BidPriceTooSmall,
 }

@@ -19,7 +19,7 @@ pub struct SetPermissions<'info> {
     #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
     pub multisig: AccountLoader<'info, Multisig>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.bump)]
+    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
     pub launchpad: Box<Account<'info, Launchpad>>,
 }
 
@@ -53,10 +53,10 @@ pub fn set_permissions<'info>(
 
     // update permissions
     let launchpad = ctx.accounts.launchpad.as_mut();
-    launchpad.allow_new_auctions = params.allow_new_auctions;
-    launchpad.allow_auction_updates = params.allow_auction_updates;
-    launchpad.allow_new_bids = params.allow_new_bids;
-    launchpad.allow_withdrawals = params.allow_withdrawals;
+    launchpad.permissions.allow_new_auctions = params.allow_new_auctions;
+    launchpad.permissions.allow_auction_updates = params.allow_auction_updates;
+    launchpad.permissions.allow_new_bids = params.allow_new_bids;
+    launchpad.permissions.allow_withdrawals = params.allow_withdrawals;
 
     if !launchpad.validate() {
         err!(LaunchpadError::InvalidLaunchpadConfig)

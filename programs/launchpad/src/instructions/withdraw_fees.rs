@@ -2,8 +2,10 @@
 
 use {
     crate::{
+        error::LaunchpadError,
         math,
         state::{
+            custody::Custody,
             launchpad::Launchpad,
             multisig::{AdminInstruction, Multisig},
         },
@@ -25,7 +27,7 @@ pub struct WithdrawFees<'info> {
               bump = launchpad.transfer_authority_bump)]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(seeds = [b"launchpad"], bump = launchpad.bump)]
+    #[account(seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(mut, seeds = [b"custody", custody.mint.key().as_ref()],

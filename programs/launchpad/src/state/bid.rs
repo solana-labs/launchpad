@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-#[derive(Copy, Clone, AnchorSerialize, AnchorDeserialize, Debug)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Debug)]
 pub enum BidType {
     Ioc,
     Fok,
@@ -20,7 +20,7 @@ pub struct Bid {
     pub whitelisted: bool,
     pub seller_initialized: bool,
     pub bid_time: i64,
-    pub bid_price: f64,
+    pub bid_price: u64,
     pub bid_amount: u64,
     pub bid_type: BidType,
     pub filled: u64,

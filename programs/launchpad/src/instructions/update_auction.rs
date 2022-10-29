@@ -1,7 +1,13 @@
 //! UpdateAuction instruction handler
 
 use {
-    crate::{error::LaunchpadError},
+    crate::{
+        error::LaunchpadError,
+        state::{
+            auction::{Auction, AuctionStats, CommonParams, PaymentParams, PricingParams},
+            launchpad::Launchpad,
+        },
+    },
     anchor_lang::prelude::*,
 };
 
@@ -10,13 +16,13 @@ pub struct UpdateAuction<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.bump)]
+    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
-        mut, 
+        mut,
         has_one = owner,
-        seeds = [b"auction", auction.name.as_bytes()],
+        seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
@@ -30,12 +36,11 @@ pub struct UpdateAuctionParams {
     pub token_ratios: Vec<u64>,
 }
 
-pub fn update_auction(
-    ctx: Context<UpdateAuction>,
-    params: &UpdateAuctionParams,
-) -> Result {
-    require!(ctx.accounts.launchpad.allow_auction_updates, 
-        LaunchpadError::AuctionUpdatesNotAllowed);
+pub fn update_auction(ctx: Context<UpdateAuction>, params: &UpdateAuctionParams) -> Result<()> {
+    require!(
+        ctx.accounts.launchpad.permissions.allow_auction_updates,
+        LaunchpadError::AuctionUpdatesNotAllowed
+    );
 
     // update auction data
     let auction = ctx.accounts.auction.as_mut();
@@ -44,20 +49,19 @@ pub fn update_auction(
         return err!(LaunchpadError::AuctionNotUpdatable);
     }
 
-    auction.common = params.common;
+    auction.common = params.common.clone();
     auction.payment = params.payment;
     auction.pricing = params.pricing;
-    auction.stats = AuctionStats::default();
 
-    for n in 0..auction.num_tokens {
+    for n in 0..(auction.num_tokens as usize) {
         auction.tokens[n].ratio = params.token_ratios[n];
     }
 
-    if !auction.validate() {
+    auction.update_time = auction.get_time()?;
+
+    if !auction.validate(auction.update_time) {
         err!(LaunchpadError::InvalidAuctionConfig)
     } else {
-        Ok(0)
+        Ok(())
     }
-
-    Ok(())
 }

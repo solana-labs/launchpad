@@ -4,7 +4,7 @@ use {
     crate::{
         error::LaunchpadError,
         state::{
-            launchpad::Launchpad,
+            launchpad::{Fee, Launchpad},
             multisig::{AdminInstruction, Multisig},
         },
     },
@@ -19,16 +19,16 @@ pub struct SetFees<'info> {
     #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
     pub multisig: AccountLoader<'info, Multisig>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.bump)]
+    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
     pub launchpad: Box<Account<'info, Launchpad>>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct SetFeesParams {
-    pub new_auction_fee: Fee,
-    pub auction_update_fee: Fee,
-    pub invalid_bid_fee: Fee,
-    pub trade_fee: Fee,
+    pub new_auction: Fee,
+    pub auction_update: Fee,
+    pub invalid_bid: Fee,
+    pub trade: Fee,
 }
 
 pub fn set_fees<'info>(
@@ -53,10 +53,10 @@ pub fn set_fees<'info>(
 
     // update permissions
     let launchpad = ctx.accounts.launchpad.as_mut();
-    launchpad.fees.new_auction = params.new_auction_fee;
-    launchpad.fees.auction_update = params.auction_update_fee;
-    launchpad.fees.invalid_bid = params.invalid_bid_fee;
-    launchpad.fees.trade = params.trade_fee;
+    launchpad.fees.new_auction = params.new_auction;
+    launchpad.fees.auction_update = params.auction_update;
+    launchpad.fees.invalid_bid = params.invalid_bid;
+    launchpad.fees.trade = params.trade;
 
     if !launchpad.validate() {
         err!(LaunchpadError::InvalidLaunchpadConfig)

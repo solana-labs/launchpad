@@ -1,8 +1,13 @@
 //! WithdrawFunds instruction handler
 
 use {
-    crate::{error::LaunchpadError, oracle::OracleType},
+    crate::{
+        error::LaunchpadError,
+        math,
+        state::{custody::Custody, launchpad::Launchpad, seller_balance::SellerBalance},
+    },
     anchor_lang::prelude::*,
+    anchor_spl::token::{Token, TokenAccount},
 };
 
 #[derive(Accounts)]
@@ -12,10 +17,13 @@ pub struct WithdrawFunds<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
-        seeds = [b"transfer_authority"], 
+        seeds = [b"transfer_authority"],
         bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
+
+    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
         mut,
@@ -25,14 +33,14 @@ pub struct WithdrawFunds<'info> {
     pub custody: Box<Account<'info, Custody>>,
 
     #[account(
-        mut, 
+        mut,
         constraint = custody_token_account.key() == custody.token_account.key()
     )]
     pub custody_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
-        has_one = owner, 
+        has_one = owner,
         constraint = seller_balance.custody == custody.key(),
         seeds = [b"seller_balance", seller_balance.custody.as_ref()],
         bump = seller_balance.bump
@@ -40,7 +48,7 @@ pub struct WithdrawFunds<'info> {
     pub seller_balance: Box<Account<'info, SellerBalance>>,
 
     #[account(
-        mut, 
+        mut,
         constraint = receiving_account.mint == custody_token_account.mint,
         has_one = owner
     )]
@@ -51,15 +59,14 @@ pub struct WithdrawFunds<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct WithdrawFundsParams {
-    pub amount: u64
+    pub amount: u64,
 }
 
-pub fn withdraw_funds(
-    ctx: Context<WithdrawFunds>,
-    params: &WithdrawFundsParams,
-) -> Result {
-    require!(ctx.accounts.launchpad.allow_withdrawals, 
-        LaunchpadError::WithdrawalsNotAllowed);
+pub fn withdraw_funds(ctx: Context<WithdrawFunds>, params: &WithdrawFundsParams) -> Result<()> {
+    require!(
+        ctx.accounts.launchpad.permissions.allow_withdrawals,
+        LaunchpadError::WithdrawalsNotAllowed
+    );
 
     // validate inputs
     require_gt!(params.amount, 0u64, LaunchpadError::InvalidTokenAmount);

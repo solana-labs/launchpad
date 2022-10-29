@@ -1,7 +1,13 @@
 //! Init instruction handler
 
 use {
-    crate::state::{launchpad::Launchpad, multisig::Multisig},
+    crate::{
+        error::LaunchpadError,
+        state::{
+            launchpad::{Fee, Launchpad},
+            multisig::Multisig,
+        },
+    },
     anchor_lang::prelude::*,
     solana_program::program_error::ProgramError,
 };
@@ -11,20 +17,42 @@ pub struct Init<'info> {
     #[account(mut)]
     pub upgrade_authority: Signer<'info>,
 
-    #[account(init, payer = upgrade_authority, space = Multisig::LEN, seeds = [b"multisig"], bump)]
+    #[account(
+        init, 
+        payer = upgrade_authority, 
+        space = Multisig::LEN, 
+        seeds = [b"multisig"], 
+        bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
 
     /// CHECK: empty PDA, will be set as authority for token accounts
-    #[account(init, payer = upgrade_authority, space = 0, seeds = [b"transfer_authority"], bump)]
+    #[account(
+        init, 
+        payer = upgrade_authority, 
+        space = 0, 
+        seeds = [b"transfer_authority"], 
+        bump
+    )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(init, payer = upgrade_authority, space = Launchpad::LEN, seeds = [b"launchpad"], bump)]
-    pub launchpad: AccountLoader<'info, Launchpad>,
+    #[account(
+        init, 
+        payer = upgrade_authority, 
+        space = Launchpad::LEN, 
+        seeds = [b"launchpad"], 
+        bump
+    )]
+    pub launchpad: Box<Account<'info, Launchpad>>,
 
-    #[account(constraint = launchpad_program.programdata_address()? == Some(launchpad_program_data.key()))]
+    #[account(
+        constraint = launchpad_program.programdata_address()? == Some(launchpad_program_data.key())
+    )]
     pub launchpad_program: Program<'info, Launchpad>,
 
-    #[account(constraint = launchpad_program_data.upgrade_authority_address == Some(upgrade_authority.key()))]
+    #[account(
+        constraint = launchpad_program_data.upgrade_authority_address == Some(upgrade_authority.key())
+    )]
     pub launchpad_program_data: Account<'info, ProgramData>,
 
     system_program: Program<'info, System>,
@@ -58,10 +86,10 @@ pub fn init(ctx: Context<Init>, params: &InitParams) -> Result<()> {
 
     // record launchpad
     let launchpad = ctx.accounts.launchpad.as_mut();
-    launchpad.allow_new_auctions = params.allow_new_auctions;
-    launchpad.allow_auction_updates = params.allow_auction_updates;
-    launchpad.allow_new_bids = params.allow_new_bids;
-    launchpad.allow_withdrawals = params.allow_withdrawals;
+    launchpad.permissions.allow_new_auctions = params.allow_new_auctions;
+    launchpad.permissions.allow_auction_updates = params.allow_auction_updates;
+    launchpad.permissions.allow_new_bids = params.allow_new_bids;
+    launchpad.permissions.allow_withdrawals = params.allow_withdrawals;
     launchpad.fees.new_auction = params.new_auction_fee;
     launchpad.fees.auction_update = params.auction_update_fee;
     launchpad.fees.invalid_bid = params.invalid_bid_fee;
@@ -82,6 +110,6 @@ pub fn init(ctx: Context<Init>, params: &InitParams) -> Result<()> {
     if !launchpad.validate() {
         err!(LaunchpadError::InvalidLaunchpadConfig)
     } else {
-        Ok(0)
+        Ok(())
     }
 }

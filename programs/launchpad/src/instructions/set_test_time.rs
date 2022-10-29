@@ -4,6 +4,7 @@ use {
     crate::{
         error::LaunchpadError,
         state::{
+            auction::Auction,
             multisig::{AdminInstruction, Multisig},
         },
     },
@@ -20,8 +21,7 @@ pub struct SetTestTime<'info> {
 
     #[account(
         mut, 
-        constraint = auction.owner == seller_balance.owner,
-        seeds = [b"auction", auction.name.as_bytes()],
+        seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,

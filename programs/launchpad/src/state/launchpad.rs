@@ -1,12 +1,12 @@
-use anchor_lang::prelude::*;
+use {anchor_lang::prelude::*, anchor_spl::token::Transfer};
 
-#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct Fee {
     numerator: u64,
     denominator: u64,
 }
 
-#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct Fees {
     pub new_auction: Fee,
     pub auction_update: Fee,
@@ -14,7 +14,7 @@ pub struct Fees {
     pub trade: Fee,
 }
 
-#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct CollectedFees {
     pub new_auction_sol: u64,
     pub auction_update_sol: u64,
@@ -22,7 +22,7 @@ pub struct CollectedFees {
     pub trade_usdc: u64,
 }
 
-#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default)]
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct Permissions {
     pub allow_new_auctions: bool,
     pub allow_auction_updates: bool,
@@ -40,14 +40,20 @@ pub struct Launchpad {
     pub launchpad_bump: u8,
 }
 
+impl anchor_lang::Id for Launchpad {
+    fn id() -> Pubkey {
+        crate::ID
+    }
+}
+
 impl Launchpad {
     pub const LEN: usize = 8 + std::mem::size_of::<Launchpad>();
 
-    pub fn validate() -> bool {
-        fees.new_auction.numerator < fees.new_auction.denominator
-            && fees.auction_update.numerator < fees.auction_update.denominator
-            && fees.invalid_bid.numerator < fees.invalid_bid.denominator
-            && fees.trade.numerator < fees.trade.denominator
+    pub fn validate(&self) -> bool {
+        self.fees.new_auction.numerator < self.fees.new_auction.denominator
+            && self.fees.auction_update.numerator < self.fees.auction_update.denominator
+            && self.fees.invalid_bid.numerator < self.fees.invalid_bid.denominator
+            && self.fees.trade.numerator < self.fees.trade.denominator
     }
 
     pub fn transfer_tokens<'info>(

@@ -4,7 +4,10 @@ use {
     crate::{
         error::LaunchpadError,
         oracle::OracleType,
-        state::multisig::{AdminInstruction, Multisig},
+        state::{
+            custody::Custody,
+            multisig::{AdminInstruction, Multisig},
+        },
     },
     anchor_lang::prelude::*,
     anchor_spl::{
@@ -90,7 +93,7 @@ pub fn init_custody<'info>(
 
     custody.token_account = ctx.accounts.custody_token_account.key();
     custody.collected_fees = 0;
-    custdoy.mint = ctx.accounts.custody_token_mint.key();
+    custody.mint = ctx.accounts.custody_token_mint.key();
     custody.decimals = ctx.accounts.custody_token_mint.decimals;
     custody.max_oracle_price_error = params.max_oracle_price_error;
     custody.max_oracle_price_age_sec = params.max_oracle_price_age_sec;

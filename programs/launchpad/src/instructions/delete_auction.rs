@@ -4,11 +4,13 @@ use {
     crate::{
         error::LaunchpadError,
         state::{
+            self,
+            auction::Auction,
             multisig::{AdminInstruction, Multisig},
         },
     },
     anchor_lang::prelude::*,
-    anchor_spl::token::TokenAccount,
+    anchor_spl::token::{Token, TokenAccount},
 };
 
 #[derive(Accounts)]
@@ -20,21 +22,21 @@ pub struct DeleteAuction<'info> {
     pub multisig: AccountLoader<'info, Multisig>,
 
     #[account(
-        mut, 
-        seeds = [b"auction", auction.name.as_bytes()],
+        mut,
+        seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump,
         close = admin
     )]
     pub auction: Box<Account<'info, Auction>>,
 
+    token_program: Program<'info, Token>,
     // remaining accounts:
     //   1 to Auction::MAX_TOKENS dispensing custody addresses (write, unsigned)
     //      with seeds = [b"dispense", mint.key().as_ref(), auction.key().as_ref()],
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct DeleteAuctionParams {
-}
+pub struct DeleteAuctionParams {}
 
 pub fn delete_auction<'info>(
     ctx: Context<'_, '_, '_, 'info, DeleteAuction<'info>>,
@@ -60,16 +62,28 @@ pub fn delete_auction<'info>(
         return Ok(signatures_left);
     }
 
-    if !ctx.remaining_accounts.empty() {
-        let dispensers = load_dispensing_accounts();
-        for account in dispensers {
-            if account.balance > 0 {
+    if !ctx.remaining_accounts.is_empty() {
+        let dispensers = state::load_accounts::<TokenAccount>(
+            ctx.remaining_accounts,
+            &Token::id(),
+            Auction::MAX_TOKENS,
+        )?;
+        // TODO check addresses
+        for dispenser in &dispensers {
+            if dispenser.owner != crate::ID {
+                return Err(ProgramError::IllegalOwner.into());
+            }
+        }
+        for account in &dispensers {
+            if account.amount > 0 {
                 msg!("Non-empty dispensing account: {}", account.key());
                 return err!(LaunchpadError::AuctionNotEmpty);
             }
             // TODO close token account here
         }
     }
+
+    // TODO delete auction
 
     Ok(0)
 }

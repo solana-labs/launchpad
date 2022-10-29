@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use {crate::oracle::OracleType, anchor_lang::prelude::*};
 
 #[account]
 #[derive(Default, Debug)]
@@ -17,7 +17,7 @@ pub struct Custody {
 impl Custody {
     pub const LEN: usize = 8 + std::mem::size_of::<Custody>();
 
-    pub fn validate() -> bool {
+    pub fn validate(&self) -> bool {
         matches!(self.oracle_type, OracleType::None)
             || (self.oracle_account != Pubkey::default() && self.max_oracle_price_error >= 0.0)
     }

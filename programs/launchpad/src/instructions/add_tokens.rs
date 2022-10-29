@@ -1,8 +1,9 @@
 //! AddTokens instruction handler
 
 use {
-    crate::{error::LaunchpadError},
+    crate::{error::LaunchpadError, state::{auction::Auction, launchpad::Launchpad}},
     anchor_lang::prelude::*,
+    anchor_spl::token::{Token, TokenAccount}
 };
 
 #[derive(Accounts)]
@@ -20,17 +21,17 @@ pub struct AddTokens<'info> {
     /// CHECK: empty PDA, authority for token accounts
     #[account(
         mut, seeds = [b"transfer_authority"], 
-        bump = auction.transfer_authority_bump
+        bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.bump)]
+    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
         mut, 
         has_one = owner,
-        seeds = [b"auction", auction.name.as_bytes()],
+        seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
@@ -53,7 +54,7 @@ pub struct AddTokensParams {
 pub fn add_tokens(
     ctx: Context<AddTokens>,
     params: &AddTokensParams,
-) -> Result {
+) -> Result<()> {
     // TODO check dispensing custody is in auction records
     ctx.accounts.launchpad.transfer_tokens(
         ctx.accounts.funding_account.to_account_info(),
