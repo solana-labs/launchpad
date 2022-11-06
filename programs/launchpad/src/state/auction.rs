@@ -109,6 +109,7 @@ pub struct Auction {
 
     pub enabled: bool,
     pub updatable: bool,
+    pub fixed_amount: bool,
 
     pub common: CommonParams,
     pub payment: PaymentParams,

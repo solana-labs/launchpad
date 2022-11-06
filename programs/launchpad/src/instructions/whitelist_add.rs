@@ -1,7 +1,10 @@
 //! WhitelistAdd instruction handler
 
 use {
-    crate::{error::LaunchpadError, state::{self, bid::Bid, auction::Auction}},
+    crate::{
+        error::LaunchpadError,
+        state::{self, auction::Auction, bid::Bid},
+    },
     anchor_lang::prelude::*,
 };
 
@@ -11,7 +14,7 @@ pub struct WhitelistAdd<'info> {
     pub owner: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         has_one = owner,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
@@ -19,7 +22,6 @@ pub struct WhitelistAdd<'info> {
     pub auction: Box<Account<'info, Auction>>,
 
     system_program: Program<'info, System>,
-
     // remaining accounts:
     //   Bid accounts for addresses to be whitelisted (write, unsigned)
     //     seeds = [b"bid", address, auction.key().as_ref()]
@@ -27,18 +29,29 @@ pub struct WhitelistAdd<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct WhitelistAddParams {
-    addresses: Vec<Pubkey>
+    addresses: Vec<Pubkey>,
+    bumps: Vec<u8>,
 }
 
-pub fn whitelist_add(
-    ctx: Context<WhitelistAdd>,
+pub fn whitelist_add<'info>(
+    ctx: Context<'_, '_, '_, 'info, WhitelistAdd<'info>>,
     params: &WhitelistAddParams,
 ) -> Result<()> {
-    if params.addresses.is_empty() || ctx.remaining_accounts.len() != params.addresses.len() {
+    if params.addresses.is_empty()
+        || ctx.remaining_accounts.len() != params.addresses.len()
+        || params.addresses.len() != params.bumps.len()
+    {
         return Err(ProgramError::NotEnoughAccountKeys.into());
     }
 
-    let mut bid_accounts = state::create_accounts::<Bid>(ctx.remaining_accounts, &crate::ID, 32)?;
+    let mut bid_accounts = state::create_bid_accounts(
+        ctx.remaining_accounts,
+        &params.addresses,
+        &params.bumps,
+        ctx.accounts.owner.to_account_info(),
+        &ctx.accounts.auction.key(),
+        ctx.accounts.system_program.to_account_info(),
+    )?;
     for (bid, owner) in bid_accounts.iter_mut().zip(params.addresses.iter()) {
         // TODO validate address
         if bid.bump == 0 {

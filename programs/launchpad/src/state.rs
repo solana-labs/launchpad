@@ -1,13 +1,16 @@
+// Program state handling.
+
 pub mod auction;
 pub mod bid;
 pub mod custody;
 pub mod launchpad;
 pub mod multisig;
+pub mod oracle;
 pub mod seller_balance;
 
 use {
-    crate::{error::LaunchpadError, math},
-    anchor_lang::prelude::*,
+    crate::{error::LaunchpadError, math, state::bid::Bid},
+    anchor_lang::{prelude::*, Discriminator},
     anchor_spl::token::TokenAccount,
 };
 
@@ -72,10 +75,38 @@ pub fn initialize_account<'info>(
     Ok(())
 }
 
+pub fn initialize_token_account<'info>(
+    payer: AccountInfo<'info>,
+    token_account: AccountInfo<'info>,
+    mint: AccountInfo<'info>,
+    system_program: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
+    rent: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    seeds: &[&[&[u8]]],
+) -> Result<()> {
+    initialize_account(
+        payer,
+        token_account.clone(),
+        system_program.clone(),
+        &anchor_spl::token::ID,
+        seeds,
+        TokenAccount::LEN,
+    )?;
+
+    let cpi_accounts = anchor_spl::token::InitializeAccount {
+        account: token_account,
+        mint,
+        authority,
+        rent,
+    };
+    let cpi_context = anchor_lang::context::CpiContext::new(system_program, cpi_accounts);
+    anchor_spl::token::initialize_account(cpi_context.with_signer(seeds))
+}
+
 pub fn load_accounts<'a, T: AccountSerialize + AccountDeserialize + Owner + Clone>(
     accounts: &[AccountInfo<'a>],
     expected_owner: &Pubkey,
-    max_accounts: usize,
 ) -> Result<Vec<Account<'a, T>>> {
     let mut res: Vec<Account<T>> = Vec::with_capacity(accounts.len());
 
@@ -88,9 +119,6 @@ pub fn load_accounts<'a, T: AccountSerialize + AccountDeserialize + Owner + Clon
 
     if res.is_empty() {
         return Err(ProgramError::NotEnoughAccountKeys.into());
-    }
-    if res.len() > max_accounts {
-        return err!(LaunchpadError::TooManyAccountKeys);
     }
 
     Ok(res)
@@ -105,32 +133,63 @@ pub fn save_accounts<T: AccountSerialize + AccountDeserialize + Owner + Clone>(
     Ok(())
 }
 
-pub fn create_accounts<'a, T: AccountSerialize + AccountDeserialize + Owner + Clone>(
+pub fn create_bid_accounts<'a>(
     accounts: &[AccountInfo<'a>],
-    owner: &Pubkey,
-    max_accounts: usize,
-) -> Result<Vec<Account<'a, T>>> {
-    if accounts.len() > max_accounts {
-        return err!(LaunchpadError::TooManyAccountKeys);
-    }
+    owners: &[Pubkey],
+    bumps: &[u8],
+    payer: AccountInfo<'a>,
+    auction: &Pubkey,
+    system_program: AccountInfo<'a>,
+) -> Result<Vec<Account<'a, Bid>>> {
+    let mut res: Vec<Account<Bid>> = Vec::with_capacity(accounts.len());
 
-    // TODO
-    let mut res: Vec<Account<T>> = Vec::with_capacity(accounts.len());
+    for ((bid_account, owner), bump) in accounts.iter().zip(owners).zip(bumps) {
+        if bid_account.data_is_empty() {
+            initialize_account(
+                payer.clone(),
+                bid_account.clone(),
+                system_program.clone(),
+                &crate::ID,
+                &[&[b"bid", owner.key().as_ref(), auction.as_ref(), &[*bump]]],
+                Bid::LEN,
+            )?;
+            let mut bid_data = bid_account.try_borrow_mut_data()?;
+            bid_data[..8].copy_from_slice(Bid::discriminator().as_slice());
+        }
+        res.push(Account::<Bid>::try_from(bid_account)?);
+    }
 
     Ok(res)
 }
 
 pub fn create_token_accounts<'a>(
     accounts: &[AccountInfo<'a>],
-    owner: &Pubkey,
-    max_accounts: usize,
+    mints: &[AccountInfo<'a>],
+    bumps: &[u8],
+    authority: AccountInfo<'a>,
+    payer: AccountInfo<'a>,
+    auction: &Pubkey,
+    system_program: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    rent: AccountInfo<'a>,
 ) -> Result<Vec<Account<'a, TokenAccount>>> {
-    if accounts.len() > max_accounts {
-        return err!(LaunchpadError::TooManyAccountKeys);
-    }
-
-    // TODO
     let mut res: Vec<Account<TokenAccount>> = Vec::with_capacity(accounts.len());
+
+    for ((token_account, mint), bump) in accounts.iter().zip(mints).zip(bumps) {
+        if token_account.data_is_empty() {
+            initialize_token_account(
+                payer.clone(),
+                token_account.clone(),
+                mint.clone(),
+                system_program.clone(),
+                token_program.clone(),
+                rent.clone(),
+                authority.clone(),
+                &[&[b"dispense", mint.key().as_ref(), auction.as_ref(), &[*bump]]],
+            )?;
+        }
+        res.push(Account::<TokenAccount>::try_from(token_account)?);
+    }
 
     Ok(res)
 }

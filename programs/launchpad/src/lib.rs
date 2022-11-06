@@ -3,7 +3,6 @@
 mod error;
 mod instructions;
 mod math;
-mod oracle;
 mod state;
 
 use {anchor_lang::prelude::*, instructions::*};
@@ -115,7 +114,10 @@ pub mod launchpad {
         instructions::enable_auction(ctx, &params)
     }
 
-    pub fn init_auction(ctx: Context<InitAuction>, params: InitAuctionParams) -> Result<()> {
+    pub fn init_auction<'info>(
+        ctx: Context<'_, '_, '_, 'info, InitAuction<'info>>,
+        params: InitAuctionParams,
+    ) -> Result<()> {
         instructions::init_auction(ctx, &params)
     }
 
@@ -127,7 +129,10 @@ pub mod launchpad {
         instructions::update_auction(ctx, &params)
     }
 
-    pub fn whitelist_add(ctx: Context<WhitelistAdd>, params: WhitelistAddParams) -> Result<()> {
+    pub fn whitelist_add<'info>(
+        ctx: Context<'_, '_, '_, 'info, WhitelistAdd<'info>>,
+        params: WhitelistAddParams,
+    ) -> Result<()> {
         instructions::whitelist_add(ctx, &params)
     }
 

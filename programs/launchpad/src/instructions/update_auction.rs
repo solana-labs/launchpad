@@ -16,7 +16,11 @@ pub struct UpdateAuction<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
@@ -45,9 +49,7 @@ pub fn update_auction(ctx: Context<UpdateAuction>, params: &UpdateAuctionParams)
     // update auction data
     let auction = ctx.accounts.auction.as_mut();
 
-    if !auction.updatable {
-        return err!(LaunchpadError::AuctionNotUpdatable);
-    }
+    require!(auction.updatable, LaunchpadError::AuctionNotUpdatable);
 
     auction.common = params.common.clone();
     auction.payment = params.payment;

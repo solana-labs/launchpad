@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        oracle::TestOracle,
         state::{
+            oracle::TestOracle,
             custody::Custody,
             auction::Auction,
             multisig::{AdminInstruction, Multisig},
@@ -17,7 +17,11 @@ pub struct SetTestOraclePrice<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
+    #[account(
+        mut,
+        seeds = [b"multisig"],
+        bump = multisig.load()?.bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
 
     #[account(
@@ -29,18 +33,17 @@ pub struct SetTestOraclePrice<'info> {
 
     #[account(
         mut,
-        constraint = custody.key() == auction.pricing.custody,
         seeds = [b"custody", custody.mint.as_ref()],
         bump = custody.bump
     )]
     pub custody: Box<Account<'info, Custody>>,
 
     #[account(
-        init_if_needed, payer = admin, space = TestOracle::LEN,
+        init_if_needed,
+        payer = admin,
+        space = TestOracle::LEN,
         constraint = oracle_account.key() == custody.oracle_account,
-        seeds = [b"oracle_account",
-                 custody.mint.as_ref(),
-                 auction.key().as_ref()],
+        seeds = [b"oracle_account", custody.mint.as_ref(), auction.key().as_ref()],
         bump
     )]
     pub oracle_account: Box<Account<'info, TestOracle>>,

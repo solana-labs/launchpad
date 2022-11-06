@@ -24,8 +24,12 @@ pub enum LaunchpadError {
     TooManyAccountKeys,
     #[msg("New auctions are not allowed at this time")]
     NewAuctionsNotAllowed,
-    #[msg("Bids are not allowed at this time")]
+    #[msg("Auction updates are not allowed at this time")]
     AuctionUpdatesNotAllowed,
+    #[msg("Auction refills are not allowed at this time")]
+    AuctionRefillsNotAllowed,
+    #[msg("Auction pull-outs are not allowed at this time")]
+    AuctionPullOutsNotAllowed,
     #[msg("Bids are not allowed at this time")]
     BidsNotAllowed,
     #[msg("Withdrawals are not allowed at this time")]
@@ -40,6 +44,8 @@ pub enum LaunchpadError {
     AuctionNotEmpty,
     #[msg("Auction is not updatable")]
     AuctionNotUpdatable,
+    #[msg("Auction with fixed amount")]
+    AuctionWithFixedAmount,
     #[msg("Overflow in arithmetic operation")]
     MathOverflow,
     #[msg("Unsupported price oracle")]

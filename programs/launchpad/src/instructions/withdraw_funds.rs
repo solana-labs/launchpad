@@ -22,7 +22,11 @@ pub struct WithdrawFunds<'info> {
     )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(

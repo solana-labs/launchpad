@@ -16,7 +16,11 @@ pub struct SetTestTime<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
+    #[account(
+        mut,
+        seeds = [b"multisig"],
+        bump = multisig.load()?.bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
 
     #[account(

@@ -18,29 +18,29 @@ pub struct Init<'info> {
     pub upgrade_authority: Signer<'info>,
 
     #[account(
-        init, 
-        payer = upgrade_authority, 
-        space = Multisig::LEN, 
-        seeds = [b"multisig"], 
+        init,
+        payer = upgrade_authority,
+        space = Multisig::LEN,
+        seeds = [b"multisig"],
         bump
     )]
     pub multisig: AccountLoader<'info, Multisig>,
 
     /// CHECK: empty PDA, will be set as authority for token accounts
     #[account(
-        init, 
-        payer = upgrade_authority, 
-        space = 0, 
-        seeds = [b"transfer_authority"], 
+        init,
+        payer = upgrade_authority,
+        space = 0,
+        seeds = [b"transfer_authority"],
         bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
     #[account(
-        init, 
-        payer = upgrade_authority, 
-        space = Launchpad::LEN, 
-        seeds = [b"launchpad"], 
+        init,
+        payer = upgrade_authority,
+        space = Launchpad::LEN,
+        seeds = [b"launchpad"],
         bump
     )]
     pub launchpad: Box<Account<'info, Launchpad>>,
@@ -64,6 +64,8 @@ pub struct InitParams {
     pub min_signatures: u8,
     pub allow_new_auctions: bool,
     pub allow_auction_updates: bool,
+    pub allow_auction_refills: bool,
+    pub allow_auction_pullouts: bool,
     pub allow_new_bids: bool,
     pub allow_withdrawals: bool,
     pub new_auction_fee: Fee,
@@ -88,6 +90,8 @@ pub fn init(ctx: Context<Init>, params: &InitParams) -> Result<()> {
     let launchpad = ctx.accounts.launchpad.as_mut();
     launchpad.permissions.allow_new_auctions = params.allow_new_auctions;
     launchpad.permissions.allow_auction_updates = params.allow_auction_updates;
+    launchpad.permissions.allow_auction_refills = params.allow_auction_refills;
+    launchpad.permissions.allow_auction_pullouts = params.allow_auction_pullouts;
     launchpad.permissions.allow_new_bids = params.allow_new_bids;
     launchpad.permissions.allow_withdrawals = params.allow_withdrawals;
     launchpad.fees.new_auction = params.new_auction_fee;

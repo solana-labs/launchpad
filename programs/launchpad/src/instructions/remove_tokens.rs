@@ -20,12 +20,17 @@ pub struct RemoveTokens<'info> {
 
      /// CHECK: empty PDA, authority for token accounts
     #[account(
-        mut, seeds = [b"transfer_authority"],
+        mut,
+        seeds = [b"transfer_authority"],
         bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
@@ -55,6 +60,13 @@ pub fn remove_tokens(
     ctx: Context<RemoveTokens>,
     params: &RemoveTokensParams,
 ) -> Result<()> {
+    require!(
+        ctx.accounts.launchpad.permissions.allow_auction_pullouts,
+        LaunchpadError::AuctionPullOutsNotAllowed
+    );
+
+    require!(!ctx.accounts.auction.fixed_amount, LaunchpadError::AuctionWithFixedAmount);
+
     // TODO check dispensing custody is in auction records
     ctx.accounts.launchpad.transfer_tokens(
         ctx.accounts.dispensing_custody.to_account_info(),

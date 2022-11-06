@@ -3,10 +3,10 @@
 use {
     crate::{
         error::LaunchpadError,
-        oracle::OracleType,
         state::{
             custody::Custody,
             multisig::{AdminInstruction, Multisig},
+            oracle::OracleType,
         },
     },
     anchor_lang::prelude::*,
@@ -17,11 +17,18 @@ pub struct SetOracleConfig<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
+    #[account(
+        mut,
+        seeds = [b"multisig"],
+        bump = multisig.load()?.bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
 
-    #[account(mut, seeds = [b"custody", custody.mint.as_ref()],
-              bump = custody.bump)]
+    #[account(
+        mut,
+        seeds = [b"custody", custody.mint.as_ref()],
+        bump = custody.bump
+    )]
     pub custody: Box<Account<'info, Custody>>,
 }
 

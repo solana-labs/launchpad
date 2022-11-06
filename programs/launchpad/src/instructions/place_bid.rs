@@ -32,12 +32,17 @@ pub struct PlaceBid<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
-        mut, seeds = [b"transfer_authority"],
+        mut, 
+        seeds = [b"transfer_authority"],
         bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
@@ -89,11 +94,15 @@ pub struct PlaceBid<'info> {
     pub payment_custody: Box<Account<'info, Custody>>,
 
     /// CHECK: oracle account for the payment token
-    #[account(constraint = payment_oracle_account.key() == payment_custody.oracle_account)]
+    #[account(
+        constraint = payment_oracle_account.key() == payment_custody.oracle_account
+    )]
     pub payment_oracle_account: AccountInfo<'info>,
 
     /// CHECK: account constraints checked in account trait
-    #[account(address = sysvar::slot_hashes::id())]
+    #[account(
+        address = sysvar::slot_hashes::id()
+    )]
     recent_slothashes: UncheckedAccount<'info>,
 
     system_program: Program<'info, System>,
@@ -128,15 +137,14 @@ pub fn place_bid<'info>(
     }
     let accounts_len = ctx.remaining_accounts.len();
     let accounts_half_len = accounts_len / 2;
+    require!(accounts_half_len <= Auction::MAX_TOKENS, LaunchpadError::TooManyAccountKeys);
     let receiving_accounts = state::load_accounts::<TokenAccount>(
-        &ctx.remaining_accounts[0..accounts_half_len],
-        &Token::id(),
-        accounts_half_len,
+        &ctx.remaining_accounts[..accounts_half_len],
+        &Token::id()
     )?;
     let dispensing_custodies = state::load_accounts::<TokenAccount>(
-        &ctx.remaining_accounts[accounts_half_len..accounts_len],
-        &Token::id(),
-        accounts_half_len,
+        &ctx.remaining_accounts[accounts_half_len..],
+        &Token::id()
     )?;
 
     // get the available amount at the given price

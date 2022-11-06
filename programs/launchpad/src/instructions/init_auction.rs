@@ -22,14 +22,28 @@ pub struct InitAuction<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    /// CHECK: empty PDA, authority for token accounts
+    #[account(
+        mut,
+        seeds = [b"transfer_authority"],
+        bump = launchpad.transfer_authority_bump
+    )]
+    pub transfer_authority: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
-    #[account(init,
-              payer = owner,
-              space = Auction::LEN,
-              seeds = [b"auction", params.common.name.as_bytes()],
-              bump)]
+    #[account(
+        init,
+        payer = owner,
+        space = Auction::LEN,
+        seeds = [b"auction", params.common.name.as_bytes()],
+        bump
+    )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
@@ -39,22 +53,30 @@ pub struct InitAuction<'info> {
     pub pricing_custody: Box<Account<'info, Custody>>,
 
     system_program: Program<'info, System>,
+    token_program: Program<'info, Token>,
+    rent: Sysvar<'info, Rent>,
     // remaining accounts:
     //   1 to Auction::MAX_TOKENS dispensing custody addresses (write, unsigned)
     //      with seeds = [b"dispense", mint.key().as_ref(), auction.key().as_ref()],
+    //   1 to Auction::MAX_TOKENS dispensing custody mints (read-only, unsigned)
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct InitAuctionParams {
     pub enabled: bool,
     pub updatable: bool,
+    pub fixed_amount: bool,
     pub common: CommonParams,
     pub payment: PaymentParams,
     pub pricing: PricingParams,
     pub token_ratios: Vec<u64>,
+    pub dispenser_bumps: Vec<u8>,
 }
 
-pub fn init_auction(ctx: Context<InitAuction>, params: &InitAuctionParams) -> Result<()> {
+pub fn init_auction<'info>(
+    ctx: Context<'_, '_, '_, 'info, InitAuction<'info>>,
+    params: &InitAuctionParams,
+) -> Result<()> {
     require!(
         ctx.accounts.launchpad.permissions.allow_new_auctions,
         LaunchpadError::NewAuctionsNotAllowed
@@ -62,12 +84,27 @@ pub fn init_auction(ctx: Context<InitAuction>, params: &InitAuctionParams) -> Re
 
     // create dispensing accounts
     // TODO check addresses
+    if ctx.remaining_accounts.is_empty() || ctx.remaining_accounts.len() % 2 != 0 {
+        return Err(ProgramError::NotEnoughAccountKeys.into());
+    }
+    let accounts_len = ctx.remaining_accounts.len();
+    let accounts_half_len = accounts_len / 2;
+    require!(
+        accounts_half_len <= Auction::MAX_TOKENS,
+        LaunchpadError::TooManyAccountKeys
+    );
     let dispensers = state::create_token_accounts(
-        ctx.remaining_accounts,
-        &ctx.accounts.owner.key(),
-        Auction::MAX_TOKENS,
+        &ctx.remaining_accounts[..accounts_half_len],
+        &ctx.remaining_accounts[accounts_half_len..],
+        &params.dispenser_bumps,
+        ctx.accounts.transfer_authority.to_account_info(),
+        ctx.accounts.owner.to_account_info(),
+        &ctx.accounts.auction.key(),
+        ctx.accounts.system_program.to_account_info(),
+        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.rent.to_account_info(),
     )?;
-    state::save_accounts(&dispensers)?;
+    //state::save_accounts(&dispensers)?;
 
     require_keys_eq!(
         ctx.accounts.pricing_custody.key(),
@@ -81,6 +118,7 @@ pub fn init_auction(ctx: Context<InitAuction>, params: &InitAuctionParams) -> Re
     auction.owner = ctx.accounts.owner.key();
     auction.enabled = params.enabled;
     auction.updatable = params.updatable;
+    auction.fixed_amount = params.fixed_amount;
     auction.common = params.common.clone();
     auction.payment = params.payment;
     auction.pricing = params.pricing;

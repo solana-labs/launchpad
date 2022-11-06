@@ -26,6 +26,8 @@ pub struct CollectedFees {
 pub struct Permissions {
     pub allow_new_auctions: bool,
     pub allow_auction_updates: bool,
+    pub allow_auction_refills: bool,
+    pub allow_auction_pullouts: bool,
     pub allow_new_bids: bool,
     pub allow_withdrawals: bool,
 }

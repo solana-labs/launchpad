@@ -14,7 +14,7 @@ describe("launchpad", () => {
   let auctionParams;
 
   it("init", async () => {
-    await lpd.init_fixture();
+    await lpd.initFixture();
     await lpd.init();
 
     let err = await lpd.ensureFails(lpd.init());
@@ -24,6 +24,8 @@ describe("launchpad", () => {
       permissions: {
         allowNewAuctions: true,
         allowAuctionUpdates: true,
+        allowAuctionRefills: true,
+        allowAuctionPullouts: true,
         allowNewBids: true,
         allowWithdrawals: true,
       },
@@ -39,8 +41,8 @@ describe("launchpad", () => {
         invalidBidUsdc: "0",
         tradeUsdc: "0",
       },
-      transferAuthorityBump: lpd.authority[1],
-      launchpadBump: lpd.multisig[1],
+      transferAuthorityBump: lpd.authority.bump,
+      launchpadBump: lpd.multisig.bump,
     };
 
     multisigExpected = {
@@ -59,13 +61,17 @@ describe("launchpad", () => {
         PublicKey.default,
       ],
       signed: [false, false, false, false, false, false],
-      bump: lpd.multisig[1],
+      bump: lpd.multisig.bump,
     };
 
-    let multisig = await lpd.program.account.multisig.fetch(lpd.multisig[0]);
+    let multisig = await lpd.program.account.multisig.fetch(
+      lpd.multisig.publicKey
+    );
     expect(JSON.stringify(multisig)).to.equal(JSON.stringify(multisigExpected));
 
-    let launchpad = await lpd.program.account.launchpad.fetch(lpd.launchpad[0]);
+    let launchpad = await lpd.program.account.launchpad.fetch(
+      lpd.launchpad.publicKey
+    );
     expect(JSON.stringify(launchpad)).to.equal(
       JSON.stringify(launchpadExpected)
     );
@@ -74,7 +80,9 @@ describe("launchpad", () => {
   it("setAdminSigners", async () => {
     await lpd.setAdminSigners(1);
 
-    let multisig = await lpd.program.account.multisig.fetch(lpd.multisig[0]);
+    let multisig = await lpd.program.account.multisig.fetch(
+      lpd.multisig.publicKey
+    );
     multisigExpected.minSignatures = 1;
     expect(JSON.stringify(multisig)).to.equal(JSON.stringify(multisigExpected));
   });
@@ -88,7 +96,9 @@ describe("launchpad", () => {
     };
     await lpd.setFees(launchpadExpected.fees);
 
-    let launchpad = await lpd.program.account.launchpad.fetch(lpd.launchpad[0]);
+    let launchpad = await lpd.program.account.launchpad.fetch(
+      lpd.launchpad.publicKey
+    );
     expect(JSON.stringify(launchpad)).to.equal(
       JSON.stringify(launchpadExpected)
     );
@@ -98,12 +108,16 @@ describe("launchpad", () => {
     launchpadExpected.permissions = {
       allowNewAuctions: false,
       allowAuctionUpdates: false,
+      allowAuctionRefills: false,
+      allowAuctionPullouts: false,
       allowNewBids: false,
       allowWithdrawals: false,
     };
     await lpd.setPermissions(launchpadExpected.permissions);
 
-    let launchpad = await lpd.program.account.launchpad.fetch(lpd.launchpad[0]);
+    let launchpad = await lpd.program.account.launchpad.fetch(
+      lpd.launchpad.publicKey
+    );
     expect(JSON.stringify(launchpad)).to.equal(
       JSON.stringify(launchpadExpected)
     );
@@ -165,6 +179,7 @@ describe("launchpad", () => {
     auctionParams = {
       enabled: true,
       updatable: true,
+      fixedAmount: false,
       common: {
         name: "test auction",
         description: "test only",
@@ -203,6 +218,8 @@ describe("launchpad", () => {
     launchpadExpected.permissions = {
       allowNewAuctions: true,
       allowAuctionUpdates: true,
+      allowAuctionRefills: true,
+      allowAuctionPullouts: true,
       allowNewBids: true,
       allowWithdrawals: true,
     };
@@ -210,11 +227,14 @@ describe("launchpad", () => {
 
     await lpd.initAuction(auctionParams);
 
-    let auction = await lpd.program.account.auction.fetch(lpd.auction[0]);
+    let auction = await lpd.program.account.auction.fetch(
+      lpd.auction.publicKey
+    );
     auctionExpected = {
       owner: lpd.seller.wallet.publicKey,
       enabled: true,
       updatable: true,
+      fixedAmount: false,
       common: auctionParams.common,
       payment: auctionParams.payment,
       pricing: auctionParams.pricing,
@@ -239,15 +259,15 @@ describe("launchpad", () => {
         },
       },
       tokens: [
-        { ratio: "0", account: "11111111111111111111111111111111" },
-        { ratio: "0", account: "11111111111111111111111111111111" },
+        { ratio: "1", account: lpd.dispensingCustodies[0].tokenAccount },
+        { ratio: "2", account: lpd.dispensingCustodies[1].tokenAccount },
         { ratio: "0", account: "11111111111111111111111111111111" },
         { ratio: "0", account: "11111111111111111111111111111111" },
       ],
-      numTokens: 0,
+      numTokens: 2,
       creationTime: "0",
       updateTime: "0",
-      bump: 255,
+      bump: auction.bump,
     };
     expect(JSON.stringify(auction)).to.equal(JSON.stringify(auctionExpected));
   });
@@ -262,27 +282,77 @@ describe("launchpad", () => {
     };
     await lpd.updateAuction(params);
 
-    let auction = await lpd.program.account.auction.fetch(lpd.auction[0]);
+    let auction = await lpd.program.account.auction.fetch(
+      lpd.auction.publicKey
+    );
     auctionExpected.common.description = "updated";
     expect(JSON.stringify(auction)).to.equal(JSON.stringify(auctionExpected));
   });
 
   it("disableAuction", async () => {
     await lpd.disableAuction();
-    let auction = await lpd.program.account.auction.fetch(lpd.auction[0]);
+    let auction = await lpd.program.account.auction.fetch(
+      lpd.auction.publicKey
+    );
     auctionExpected.enabled = false;
     expect(JSON.stringify(auction)).to.equal(JSON.stringify(auctionExpected));
   });
 
   it("enableAuction", async () => {
     await lpd.enableAuction();
-    let auction = await lpd.program.account.auction.fetch(lpd.auction[0]);
+    let auction = await lpd.program.account.auction.fetch(
+      lpd.auction.publicKey
+    );
     auctionExpected.enabled = true;
     expect(JSON.stringify(auction)).to.equal(JSON.stringify(auctionExpected));
   });
 
+  it("addTokens", async () => {
+    for (let i = 0; i < lpd.seller.dispensingAccounts.length; ++i) {
+      let initialSourceBalance = await lpd.getBalance(
+        lpd.seller.dispensingAccounts[i]
+      );
+      let initialDestinationBalance = await lpd.getBalance(
+        lpd.dispensingCustodies[i].tokenAccount
+      );
+      await lpd.addTokens(200, i);
+      let sourceBalance = await lpd.getBalance(
+        lpd.seller.dispensingAccounts[i]
+      );
+      let destinationBalance = await lpd.getBalance(
+        lpd.dispensingCustodies[i].tokenAccount
+      );
+      expect(initialSourceBalance - sourceBalance).to.equal(
+        200 * 10 ** lpd.dispensingCustodies[i].decimals
+      );
+      expect(destinationBalance - initialDestinationBalance).to.equal(
+        200 * 10 ** lpd.dispensingCustodies[i].decimals
+      );
+    }
+  });
+
+  it("removeTokens", async () => {
+    let initialSourceBalance = await lpd.getBalance(
+      lpd.seller.dispensingAccounts[0]
+    );
+    let initialDestinationBalance = await lpd.getBalance(
+      lpd.dispensingCustodies[0].tokenAccount
+    );
+    await lpd.removeTokens(50, 0);
+    let sourceBalance = await lpd.getBalance(lpd.seller.dispensingAccounts[0]);
+    let destinationBalance = await lpd.getBalance(
+      lpd.dispensingCustodies[0].tokenAccount
+    );
+    expect(sourceBalance - initialSourceBalance).to.equal(
+      50 * 10 ** lpd.dispensingCustodies[0].decimals
+    );
+    expect(initialDestinationBalance - destinationBalance).to.equal(
+      50 * 10 ** lpd.dispensingCustodies[0].decimals
+    );
+  });
+
   it("setTestOraclePrice", async () => {
-    /*await lpd.setTestOraclePrice(123, lpd.paymentCustody);
+    await lpd.setTestOraclePrice(123, lpd.paymentCustody);
 
     let oracle = await lpd.program.account.testOracle.fetch(
       lpd.paymentCustody.oracleAccount
@@ -291,25 +361,159 @@ describe("launchpad", () => {
       price: new BN(123000),
       expo: -3,
       conf: new BN(0),
-      publish_time: oracle.publishTime,
+      publishTime: oracle.publishTime,
     };
-    expect(JSON.stringify(oracle)).to.equal(JSON.stringify(oracleExpected));*/
+    expect(JSON.stringify(oracle)).to.equal(JSON.stringify(oracleExpected));
   });
 
   it("setTestTime", async () => {
-    /*await lpd.setTestTime(new BN(111));
+    await lpd.setTestTime(new BN(111));
 
-    let auction = await lpd.program.account.auction.fetch(lpd.auction[0]);
+    let auction = await lpd.program.account.auction.fetch(
+      lpd.auction.publicKey
+    );
     expect(JSON.stringify(auction.creationTime)).to.equal(
       JSON.stringify(new BN(111))
-    );*/
+    );
+  });
+
+  it("whitelistAdd", async () => {
+    await lpd.whitelistAdd([
+      lpd.users[0].wallet.publicKey,
+      lpd.users[1].wallet.publicKey,
+    ]);
+
+    let bid = await lpd.program.account.bid.fetch(
+      (
+        await lpd.getBidAddress(lpd.users[1].wallet.publicKey)
+      ).publicKey
+    );
+    let bidExpected = {
+      owner: lpd.users[1].wallet.publicKey,
+      auction: lpd.auction.publicKey,
+      whitelisted: true,
+      sellerInitialized: true,
+      bidTime: new BN(0),
+      bidPrice: new BN(0),
+      bidAmount: new BN(0),
+      bidType: { ioc: {} },
+      filled: new BN(0),
+      fillTime: new BN(0),
+      bump: bid.bump,
+    };
+    expect(JSON.stringify(bid)).to.equal(JSON.stringify(bidExpected));
+  });
+
+  it("whitelistRemove", async () => {
+    await lpd.whitelistRemove([lpd.users[1].wallet.publicKey]);
+
+    let bid = await lpd.program.account.bid.fetch(
+      (
+        await lpd.getBidAddress(lpd.users[1].wallet.publicKey)
+      ).publicKey
+    );
+    let bidExpected = {
+      owner: lpd.users[1].wallet.publicKey,
+      auction: lpd.auction.publicKey,
+      whitelisted: false,
+      sellerInitialized: true,
+      bidTime: new BN(0),
+      bidPrice: new BN(0),
+      bidAmount: new BN(0),
+      bidType: { ioc: {} },
+      filled: new BN(0),
+      fillTime: new BN(0),
+      bump: bid.bump,
+    };
+    expect(JSON.stringify(bid)).to.equal(JSON.stringify(bidExpected));
+  });
+
+  it("getAuctionAmount", async () => {
+    //let amount = await lpd.getAuctionAmount(100);
+    //expect(amount).to.equal(100);
+  });
+
+  it("getAuctionPrice", async () => {
+    //let price = await lpd.getAuctionPrice(100);
+    //expect(price).to.equal(100);
+  });
+
+  it("placeBid", async () => {
+    /*let user = lpd.users[0];
+    let initialBalancePayment = await lpd.getBalance(user.paymentAccount);
+    let initialBalancesReceiving = [];
+    for (const account of user.receivingAccounts) {
+      initialBalancesReceiving.push(await lpd.getBalance(account));
+    }
+
+    let bidAmount = 1;
+    let bidPrice = 100;
+    await lpd.placeBid(bidPrice, bidAmount, bidType, user);
+
+    let balancePayment = await lpd.getBalance(user.paymentAccount);
+    console.log(initialBalancePayment, balancePayment);
+    let balancesReceiving = [];
+    for (const account of user.receivingAccounts) {
+      balancesReceiving.push(await lpd.getBalance(account));
+      console.log(await lpd.getBalance(account));
+    }
+
+    let bid = await lpd.program.account.bid.fetch(
+      (await lpd.getBidAddress(lpd.users[0].wallet.publicKey)).publicKey
+    );
+    console.log(JSON.stringify(bid));
+
+    let sellerBalance = await lpd.program.account.sellerBalance.fetch(
+      (await lpd.getBidAddress(lpd.seller.balanceAccount)).publicKey
+    );
+    console.log(JSON.stringify(sellerBalance));
+*/
+    //expect(balance).to.equal(initialBalance + withdrawAmount);
+  });
+
+  it("cancelBid", async () => {
+    /*  let user = lpd.users[0];
+    let initialBalanceSol = await lpd.getBalance(user.wallet.publicKey);
+
+    await lpd.cancelBid();
+
+    let balanceSol = await lpd.getBalance(user.wallet.publicKey);
+    console.log(initialBalanceSol, balanceSol);
+
+    try {
+      let bid = await lpd.program.account.bid.fetch(
+        (await lpd.getBidAddress(lpd.users[0].wallet.publicKey)).publicKey
+      );
+      assert(false, "Fetch Bid should've been failed");
+    } catch (err) {}
+    */
   });
 
   it("withdrawFees", async () => {
-    //await lpd.withdrawFees(new BN(1), lpd.paymentCustody);
+    /*let initialBalance = await lpd.getBalance(lpd.feesAccount);
+    let withdrawAmount = 1;
+    await lpd.withdrawFees(withdrawAmount, lpd.paymentCustody, lpd.feesAccount);
+    let balance = await lpd.getBalance(lpd.feesAccount);
+    expect(balance).to.equal(initialBalance + withdrawAmount);*/
+  });
+
+  it("withdrawFunds", async () => {
+    /*let initialBalance = await lpd.getBalance(lpd.seller.paymentAccount);
+    let withdrawAmount = 1;
+    await lpd.withdrawFunds(
+      withdrawAmount,
+      lpd.paymentCustody,
+      lpd.seller.paymentAccount
+    );
+    let balance = await lpd.getBalance(lpd.seller.paymentAccount);
+    expect(balance).to.equal(initialBalance + withdrawAmount);*/
   });
 
   it("deleteAuction", async () => {
-    //await lpd.deleteAuction();
+    await lpd.deleteAuction();
+    try {
+      await lpd.program.account.auction.fetch(lpd.auction.publicKey);
+      assert(false, "Fetch Auction should've been failed");
+    } catch (err) {}
   });
 });

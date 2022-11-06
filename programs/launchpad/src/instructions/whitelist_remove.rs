@@ -1,7 +1,10 @@
 //! WhitelistRemove instruction handler
 
 use {
-    crate::{error::LaunchpadError, state::{self, auction::Auction, bid::Bid}},
+    crate::{
+        error::LaunchpadError,
+        state::{self, auction::Auction, bid::Bid},
+    },
     anchor_lang::prelude::*,
 };
 
@@ -11,29 +14,29 @@ pub struct WhitelistRemove<'info> {
     pub owner: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         has_one = owner,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
-
-    system_program: Program<'info, System>,
-
     // remaining accounts:
     //   Bid accounts to be removed from the whitelist (write, unsigned)
     //     seeds = [b"bid", address, auction.key().as_ref()]
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct WhitelistRemoveParams {
-}
+pub struct WhitelistRemoveParams {}
 
 pub fn whitelist_remove(
     ctx: Context<WhitelistRemove>,
     _params: &WhitelistRemoveParams,
 ) -> Result<()> {
-    let mut bid_accounts = state::load_accounts::<Bid>(ctx.remaining_accounts, &crate::ID, 32)?;
+    if ctx.remaining_accounts.is_empty() {
+        return Err(ProgramError::NotEnoughAccountKeys.into());
+    }
+
+    let mut bid_accounts = state::load_accounts::<Bid>(ctx.remaining_accounts, &crate::ID)?;
     for bid in &mut bid_accounts {
         // TODO validate address
         bid.whitelisted = false;

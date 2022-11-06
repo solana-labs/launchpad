@@ -10,7 +10,10 @@ pub struct GetAuctionPrice<'info> {
     #[account()]
     pub user: Signer<'info>,
 
-    #[account(seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        seeds = [b"launchpad"], 
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(

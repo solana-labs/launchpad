@@ -3,7 +3,7 @@
 use {
     crate::{error::LaunchpadError, state::{auction::Auction, launchpad::Launchpad}},
     anchor_lang::prelude::*,
-    anchor_spl::token::{Token, TokenAccount}
+    anchor_spl::token::{Token, Mint, TokenAccount}
 };
 
 #[derive(Accounts)]
@@ -20,12 +20,17 @@ pub struct AddTokens<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
-        mut, seeds = [b"transfer_authority"], 
+        mut,
+        seeds = [b"transfer_authority"], 
         bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(mut, seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
@@ -36,14 +41,22 @@ pub struct AddTokens<'info> {
     )]
     pub auction: Box<Account<'info, Auction>>,
 
+    pub dispensing_custody_mint: Box<Account<'info, Mint>>,
+
     #[account(
-        mut,
-        seeds = [b"dispense", dispensing_custody.mint.as_ref(), auction.key().as_ref()],
+        init_if_needed,
+        payer = owner,
+        constraint = dispensing_custody_mint.key() == dispensing_custody.mint,
+        token::mint = dispensing_custody_mint,
+        token::authority = transfer_authority,
+        seeds = [b"dispense", dispensing_custody_mint.key().as_ref(), auction.key().as_ref()],
         bump
     )]
     pub dispensing_custody: Box<Account<'info, TokenAccount>>,
 
+    system_program: Program<'info, System>,
     token_program: Program<'info, Token>,
+    rent: Sysvar<'info, Rent>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -55,11 +68,18 @@ pub fn add_tokens(
     ctx: Context<AddTokens>,
     params: &AddTokensParams,
 ) -> Result<()> {
+    require!(
+        ctx.accounts.launchpad.permissions.allow_auction_refills,
+        LaunchpadError::AuctionRefillsNotAllowed
+    );
+
+    require!(!ctx.accounts.auction.fixed_amount, LaunchpadError::AuctionWithFixedAmount);
+
     // TODO check dispensing custody is in auction records
     ctx.accounts.launchpad.transfer_tokens(
         ctx.accounts.funding_account.to_account_info(),
         ctx.accounts.dispensing_custody.to_account_info(),
-        ctx.accounts.transfer_authority.clone(),
+        ctx.accounts.owner.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
         params.amount,
     )?;

@@ -1,4 +1,4 @@
-use {crate::oracle::OracleType, anchor_lang::prelude::*};
+use {crate::state::oracle::OracleType, anchor_lang::prelude::*};
 
 #[account]
 #[derive(Default, Debug)]

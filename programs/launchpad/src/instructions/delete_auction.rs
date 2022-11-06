@@ -6,6 +6,7 @@ use {
         state::{
             self,
             auction::Auction,
+            launchpad::Launchpad,
             multisig::{AdminInstruction, Multisig},
         },
     },
@@ -18,14 +19,33 @@ pub struct DeleteAuction<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
+    #[account(
+        mut,
+        seeds = [b"multisig"],
+        bump = multisig.load()?.bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
+
+    /// CHECK: empty PDA, authority for token accounts
+    #[account(
+        mut,
+        seeds = [b"transfer_authority"],
+        bump = launchpad.transfer_authority_bump
+    )]
+    pub transfer_authority: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
+    pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
         mut,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump,
-        close = admin
+        close = transfer_authority
     )]
     pub auction: Box<Account<'info, Auction>>,
 
@@ -64,9 +84,8 @@ pub fn delete_auction<'info>(
 
     if !ctx.remaining_accounts.is_empty() {
         let dispensers = state::load_accounts::<TokenAccount>(
-            ctx.remaining_accounts,
+            &ctx.remaining_accounts[..Auction::MAX_TOKENS],
             &Token::id(),
-            Auction::MAX_TOKENS,
         )?;
         // TODO check addresses
         for dispenser in &dispensers {
@@ -82,8 +101,6 @@ pub fn delete_auction<'info>(
             // TODO close token account here
         }
     }
-
-    // TODO delete auction
 
     Ok(0)
 }

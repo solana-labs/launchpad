@@ -19,22 +19,37 @@ pub struct WithdrawFees<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
+    #[account(
+        mut,
+        seeds = [b"multisig"],
+        bump = multisig.load()?.bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
 
     /// CHECK: empty PDA, authority for token accounts
-    #[account(seeds = [b"transfer_authority"], 
-              bump = launchpad.transfer_authority_bump)]
+    #[account(
+        seeds = [b"transfer_authority"], 
+        bump = launchpad.transfer_authority_bump
+    )]
     pub transfer_authority: AccountInfo<'info>,
 
-    #[account(seeds = [b"launchpad"], bump = launchpad.launchpad_bump)]
+    #[account(
+        seeds = [b"launchpad"],
+        bump = launchpad.launchpad_bump
+    )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
-    #[account(mut, seeds = [b"custody", custody.mint.key().as_ref()],
-              bump = custody.bump)]
+    #[account(
+        mut,
+        seeds = [b"custody", custody.mint.key().as_ref()],
+        bump = custody.bump
+    )]
     pub custody: Box<Account<'info, Custody>>,
 
-    #[account(mut, constraint = custody_token_account.key() == custody.token_account.key())]
+    #[account(
+        mut,
+        constraint = custody_token_account.key() == custody.token_account.key()
+    )]
     pub custody_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(mut)]

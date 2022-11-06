@@ -3,8 +3,8 @@
 use {
     crate::{
         error::LaunchpadError,
-        oracle::OracleType,
         state::{
+            oracle::OracleType,
             custody::Custody,
             multisig::{AdminInstruction, Multisig},
         },
@@ -21,11 +21,18 @@ pub struct InitCustody<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(mut, seeds = [b"multisig"], bump = multisig.load()?.bump)]
+    #[account(
+        mut, 
+        seeds = [b"multisig"], 
+        bump = multisig.load()?.bump
+    )]
     pub multisig: AccountLoader<'info, Multisig>,
 
     /// CHECK: empty PDA, will be set as authority for token accounts
-    #[account(seeds = [b"transfer_authority"], bump)]
+    #[account(
+        seeds = [b"transfer_authority"], 
+        bump
+    )]
     pub transfer_authority: AccountInfo<'info>,
 
     // instruction can be called multiple times due to multisig use, hence init_if_needed
@@ -33,27 +40,31 @@ pub struct InitCustody<'info> {
     // all signatures are collected. When account is in zeroed state it can't be used in other
     // instructions because seeds are computed with recorded mints. Uniqueness is enforced
     // manually in the instruction handler.
-    #[account(init_if_needed,
-              payer = admin,
-              space = Custody::LEN,
-              seeds = [b"custody", custody_token_mint.key().as_ref()],
-              bump)]
+    #[account(
+        init_if_needed,
+        payer = admin,
+        space = Custody::LEN,
+        seeds = [b"custody", custody_token_mint.key().as_ref()],
+        bump
+    )]
     pub custody: Box<Account<'info, Custody>>,
 
     pub custody_token_mint: Box<Account<'info, Mint>>,
 
     // token custodies are shared between multiple auctions
-    #[account(init_if_needed,
-              payer = admin,
-              constraint = custody_token_mint.key() == custody_token_account.mint,
-              associated_token::mint = custody_token_mint,
-              associated_token::authority = transfer_authority)]
+    #[account(
+        init_if_needed,
+        payer = admin,
+        constraint = custody_token_mint.key() == custody_token_account.mint,
+        associated_token::mint = custody_token_mint,
+        associated_token::authority = transfer_authority
+    )]
     pub custody_token_account: Box<Account<'info, TokenAccount>>,
 
     system_program: Program<'info, System>,
-    rent: Sysvar<'info, Rent>,
     token_program: Program<'info, Token>,
     associated_token_program: Program<'info, AssociatedToken>,
+    rent: Sysvar<'info, Rent>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
