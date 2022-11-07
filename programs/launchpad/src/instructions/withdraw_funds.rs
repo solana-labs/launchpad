@@ -12,7 +12,7 @@ use {
 
 #[derive(Accounts)]
 pub struct WithdrawFunds<'info> {
-    #[account(mut)]
+    #[account()]
     pub owner: Signer<'info>,
 
     /// CHECK: empty PDA, authority for token accounts
@@ -23,14 +23,12 @@ pub struct WithdrawFunds<'info> {
     pub transfer_authority: AccountInfo<'info>,
 
     #[account(
-        mut,
         seeds = [b"launchpad"],
         bump = launchpad.launchpad_bump
     )]
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
-        mut,
         seeds = [b"custody", custody.mint.as_ref()],
         bump = custody.bump
     )]

@@ -14,7 +14,7 @@ use {
 
 #[derive(Accounts)]
 pub struct SetOracleConfig<'info> {
-    #[account(mut)]
+    #[account()]
     pub admin: Signer<'info>,
 
     #[account(

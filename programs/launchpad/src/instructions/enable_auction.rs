@@ -7,7 +7,7 @@ use {
 
 #[derive(Accounts)]
 pub struct EnableAuction<'info> {
-    #[account(mut)]
+    #[account()]
     pub owner: Signer<'info>,
 
     #[account(

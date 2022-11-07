@@ -414,7 +414,6 @@ export class LaunchpadTester {
           .accounts({
             admin: this.admins[i].publicKey,
             multisig: this.multisig.publicKey,
-            systemProgram: SystemProgram.programId,
           })
           .remainingAccounts(this.adminMetas)
           .signers([this.admins[i]])
@@ -828,17 +827,20 @@ export class LaunchpadTester {
 
   whitelistRemove = async (addresses: PublicKey[]) => {
     let bids = [];
+    let bumps = [];
     for (const address of addresses) {
+      let bid = await this.getBidAddress(address);
       bids.push({
         isSigner: false,
         isWritable: true,
-        pubkey: (await this.getBidAddress(address)).publicKey,
+        pubkey: bid.publicKey,
       });
+      bumps.push(bid.bump);
     }
     try {
       await this.program.methods
         .whitelistRemove({
-          addresses: addresses,
+          bumps: Buffer.from(bumps),
         })
         .accounts({
           owner: this.seller.wallet.publicKey,

@@ -7,7 +7,7 @@ use {
 
 #[derive(Accounts)]
 pub struct CancelBid<'info> {
-    #[account(mut)]
+    #[account()]
     pub owner: Signer<'info>,
 
     #[account(
@@ -28,11 +28,7 @@ pub struct CancelBid<'info> {
 pub struct CancelBidParams {}
 
 pub fn cancel_bid(ctx: Context<CancelBid>, _params: &CancelBidParams) -> Result<()> {
-    if ctx
-        .accounts
-        .auction
-        .is_ended(ctx.accounts.auction.get_time()?)
-    {
+    if ctx.accounts.auction.is_ended()? {
         let bid = ctx.accounts.bid.as_mut();
         if ctx.accounts.owner.key() == bid.owner
             || (bid.seller_initialized && ctx.accounts.auction.owner == bid.owner)

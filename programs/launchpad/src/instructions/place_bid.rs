@@ -32,7 +32,6 @@ pub struct PlaceBid<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
-        mut, 
         seeds = [b"transfer_authority"],
         bump = launchpad.transfer_authority_bump
     )]
@@ -73,7 +72,6 @@ pub struct PlaceBid<'info> {
     pub bid: Box<Account<'info, Bid>>,
 
     #[account(
-        mut,
         constraint = pricing_custody.key() == auction.pricing.custody,
         seeds = [b"custody", pricing_custody.mint.as_ref()],
         bump = pricing_custody.bump
@@ -131,20 +129,24 @@ pub fn place_bid<'info>(
     // validate inputs
     require_gt!(params.amount, 0u64, LaunchpadError::InvalidTokenAmount);
 
+    // TODO validate num of dispensing custodies
+
     // load accounts
     if ctx.remaining_accounts.is_empty() || ctx.remaining_accounts.len() % 2 != 0 {
         return Err(ProgramError::NotEnoughAccountKeys.into());
     }
-    let accounts_len = ctx.remaining_accounts.len();
-    let accounts_half_len = accounts_len / 2;
-    require!(accounts_half_len <= Auction::MAX_TOKENS, LaunchpadError::TooManyAccountKeys);
+    let accounts_half_len = ctx.remaining_accounts.len() / 2;
+    require!(
+        accounts_half_len <= Auction::MAX_TOKENS,
+        LaunchpadError::TooManyAccountKeys
+    );
     let receiving_accounts = state::load_accounts::<TokenAccount>(
         &ctx.remaining_accounts[..accounts_half_len],
-        &Token::id()
+        &Token::id(),
     )?;
     let dispensing_custodies = state::load_accounts::<TokenAccount>(
         &ctx.remaining_accounts[accounts_half_len..],
-        &Token::id()
+        &Token::id(),
     )?;
 
     // get the available amount at the given price

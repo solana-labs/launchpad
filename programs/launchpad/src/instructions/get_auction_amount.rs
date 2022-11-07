@@ -11,7 +11,6 @@ pub struct GetAuctionAmount<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut, 
         seeds = [b"launchpad"], 
         bump = launchpad.launchpad_bump
     )]

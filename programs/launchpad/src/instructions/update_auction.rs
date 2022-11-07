@@ -13,11 +13,10 @@ use {
 
 #[derive(Accounts)]
 pub struct UpdateAuction<'info> {
-    #[account(mut)]
+    #[account()]
     pub owner: Signer<'info>,
 
     #[account(
-        mut,
         seeds = [b"launchpad"],
         bump = launchpad.launchpad_bump
     )]
@@ -61,7 +60,7 @@ pub fn update_auction(ctx: Context<UpdateAuction>, params: &UpdateAuctionParams)
 
     auction.update_time = auction.get_time()?;
 
-    if !auction.validate(auction.update_time) {
+    if !auction.validate()? {
         err!(LaunchpadError::InvalidAuctionConfig)
     } else {
         Ok(())

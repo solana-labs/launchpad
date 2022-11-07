@@ -429,12 +429,14 @@ describe("launchpad", () => {
   });
 
   it("getAuctionAmount", async () => {
-    //let amount = await lpd.getAuctionAmount(100);
+    let amount = await lpd.getAuctionAmount(100);
+    console.log("AMOUNT:", amount);
     //expect(amount).to.equal(100);
   });
 
   it("getAuctionPrice", async () => {
-    //let price = await lpd.getAuctionPrice(100);
+    let price = await lpd.getAuctionPrice(100);
+    console.log("PRICE:", price);
     //expect(price).to.equal(100);
   });
 

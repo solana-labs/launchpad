@@ -16,7 +16,7 @@ use {
 
 #[derive(Accounts)]
 pub struct WithdrawFees<'info> {
-    #[account(mut)]
+    #[account()]
     pub admin: Signer<'info>,
 
     #[account(

@@ -22,6 +22,8 @@ pub enum LaunchpadError {
     InvalidTokenAmount,
     #[msg("Too many remaining accounts")]
     TooManyAccountKeys,
+    #[msg("Invalid Bid address")]
+    InvalidBidAddress,
     #[msg("New auctions are not allowed at this time")]
     NewAuctionsNotAllowed,
     #[msg("Auction updates are not allowed at this time")]

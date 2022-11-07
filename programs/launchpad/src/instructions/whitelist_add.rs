@@ -14,7 +14,6 @@ pub struct WhitelistAdd<'info> {
     pub owner: Signer<'info>,
 
     #[account(
-        mut,
         has_one = owner,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
@@ -52,12 +51,34 @@ pub fn whitelist_add<'info>(
         &ctx.accounts.auction.key(),
         ctx.accounts.system_program.to_account_info(),
     )?;
-    for (bid, owner) in bid_accounts.iter_mut().zip(params.addresses.iter()) {
-        // TODO validate address
+    for ((bid, owner), bump) in bid_accounts
+        .iter_mut()
+        .zip(params.addresses.iter())
+        .zip(params.bumps.iter())
+    {
+        // validate bid address
+        let expected_bid_key = Pubkey::create_program_address(
+            &[
+                b"bid",
+                owner.as_ref(),
+                ctx.accounts.auction.key().as_ref(),
+                &[*bump],
+            ],
+            &crate::ID,
+        )
+        .map_err(|_| LaunchpadError::InvalidBidAddress)?;
+        require_keys_eq!(
+            bid.key(),
+            expected_bid_key,
+            LaunchpadError::InvalidBidAddress
+        );
+
+        // add to white-list
         if bid.bump == 0 {
             bid.owner = *owner;
             bid.auction = ctx.accounts.auction.key();
             bid.seller_initialized = true;
+            bid.bump = *bump;
         }
         bid.whitelisted = true;
     }

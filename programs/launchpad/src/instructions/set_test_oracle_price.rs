@@ -1,13 +1,11 @@
 //! SetTestOraclePrice instruction handler
 
 use {
-    crate::{
-        state::{
-            oracle::TestOracle,
-            custody::Custody,
-            auction::Auction,
-            multisig::{AdminInstruction, Multisig},
-        },
+    crate::state::{
+        auction::Auction,
+        custody::Custody,
+        multisig::{AdminInstruction, Multisig},
+        oracle::TestOracle,
     },
     anchor_lang::prelude::*,
 };
@@ -25,14 +23,12 @@ pub struct SetTestOraclePrice<'info> {
     pub multisig: AccountLoader<'info, Multisig>,
 
     #[account(
-        mut, 
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
-        mut,
         seeds = [b"custody", custody.mint.as_ref()],
         bump = custody.bump
     )]

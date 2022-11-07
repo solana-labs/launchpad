@@ -136,8 +136,8 @@ pub mod launchpad {
         instructions::whitelist_add(ctx, &params)
     }
 
-    pub fn whitelist_remove(
-        ctx: Context<WhitelistRemove>,
+    pub fn whitelist_remove<'info>(
+        ctx: Context<'_, '_, '_, 'info, WhitelistRemove<'info>>,
         params: WhitelistRemoveParams,
     ) -> Result<()> {
         instructions::whitelist_remove(ctx, &params)

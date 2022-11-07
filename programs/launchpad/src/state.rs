@@ -155,6 +155,10 @@ pub fn create_bid_accounts<'a>(
             )?;
             let mut bid_data = bid_account.try_borrow_mut_data()?;
             bid_data[..8].copy_from_slice(Bid::discriminator().as_slice());
+        } else {
+            if bid_account.owner != &crate::ID {
+                return Err(ProgramError::IllegalOwner.into());
+            }
         }
         res.push(Account::<Bid>::try_from(bid_account)?);
     }

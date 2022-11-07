@@ -7,7 +7,7 @@ use {
 
 #[derive(Accounts)]
 pub struct SetAdminSigners<'info> {
-    #[account(mut)]
+    #[account()]
     pub admin: Signer<'info>,
 
     #[account(
@@ -17,7 +17,6 @@ pub struct SetAdminSigners<'info> {
     )]
     pub multisig: AccountLoader<'info, Multisig>,
 
-    system_program: Program<'info, System>,
     // remaining accounts: 1 to Multisig::MAX_SIGNERS admin signers (read-only, unsigned)
 }
 

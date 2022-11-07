@@ -16,7 +16,7 @@ use {
 
 #[derive(Accounts)]
 pub struct DeleteAuction<'info> {
-    #[account(mut)]
+    #[account()]
     pub admin: Signer<'info>,
 
     #[account(
@@ -35,7 +35,6 @@ pub struct DeleteAuction<'info> {
     pub transfer_authority: AccountInfo<'info>,
 
     #[account(
-        mut,
         seeds = [b"launchpad"],
         bump = launchpad.launchpad_bump
     )]

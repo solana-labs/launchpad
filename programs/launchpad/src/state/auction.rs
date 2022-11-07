@@ -162,16 +162,16 @@ impl Auction {
     pub const LEN: usize = 8 + std::mem::size_of::<Auction>();
     pub const MAX_TOKENS: usize = 4;
 
-    pub fn validate(&self, current_time: i64) -> bool {
-        self.common.name.len() >= 6
-            && self.common.validate(current_time)
+    pub fn validate(&self) -> Result<bool> {
+        Ok(self.common.name.len() >= 6
+            && self.common.validate(self.get_time()?)
             && self.payment.validate()
-            && self.pricing.validate()
+            && self.pricing.validate())
     }
 
     /// Checks if the auction is ended
-    pub fn is_ended(&self, current_time: i64) -> bool {
-        current_time >= self.common.end_time
+    pub fn is_ended(&self) -> Result<bool> {
+        Ok(self.get_time()? >= self.common.end_time)
     }
 
     #[cfg(feature = "test")]

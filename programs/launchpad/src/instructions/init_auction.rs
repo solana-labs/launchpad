@@ -24,14 +24,12 @@ pub struct InitAuction<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
-        mut,
         seeds = [b"transfer_authority"],
         bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
     #[account(
-        mut,
         seeds = [b"launchpad"],
         bump = launchpad.launchpad_bump
     )]
@@ -87,8 +85,7 @@ pub fn init_auction<'info>(
     if ctx.remaining_accounts.is_empty() || ctx.remaining_accounts.len() % 2 != 0 {
         return Err(ProgramError::NotEnoughAccountKeys.into());
     }
-    let accounts_len = ctx.remaining_accounts.len();
-    let accounts_half_len = accounts_len / 2;
+    let accounts_half_len = ctx.remaining_accounts.len() / 2;
     require!(
         accounts_half_len <= Auction::MAX_TOKENS,
         LaunchpadError::TooManyAccountKeys
@@ -142,7 +139,7 @@ pub fn init_auction<'info>(
     };
     auction.update_time = auction.creation_time;
 
-    if !auction.validate(auction.get_time()?) {
+    if !auction.validate()? {
         err!(LaunchpadError::InvalidAuctionConfig)
     } else {
         Ok(())
