@@ -5,6 +5,7 @@ use {
         error::LaunchpadError,
         math,
         state::{
+            self,
             custody::Custody,
             launchpad::Launchpad,
             multisig::{AdminInstruction, Multisig},
@@ -28,6 +29,7 @@ pub struct WithdrawFees<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
+        mut,
         seeds = [b"transfer_authority"], 
         bump = launchpad.transfer_authority_bump
     )]
@@ -52,15 +54,26 @@ pub struct WithdrawFees<'info> {
     )]
     pub custody_token_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
-    pub receiving_account: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = receiving_token_account.mint == custody_token_account.mint
+    )]
+    pub receiving_token_account: Box<Account<'info, TokenAccount>>,
+
+    /// CHECK: SOL fees receiving account
+    #[account(
+        mut,
+        constraint = receiving_sol_account.data_is_empty()
+    )]
+    pub receiving_sol_account: AccountInfo<'info>,
 
     token_program: Program<'info, Token>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct WithdrawFeesParams {
-    pub amount: u64,
+    pub token_amount: u64,
+    pub sol_amount: u64,
 }
 
 pub fn withdraw_fees<'info>(
@@ -68,7 +81,10 @@ pub fn withdraw_fees<'info>(
     params: &WithdrawFeesParams,
 ) -> Result<u8> {
     // validate inputs
-    require_gt!(params.amount, 0u64, LaunchpadError::InvalidTokenAmount);
+    require!(
+        params.token_amount > 0 || params.sol_amount > 0,
+        LaunchpadError::InvalidTokenAmount
+    );
 
     // validate signatures
     let mut multisig = ctx.accounts.multisig.load_mut()?;
@@ -86,21 +102,41 @@ pub fn withdraw_fees<'info>(
         return Ok(signatures_left);
     }
 
-    // transfer fees from the custody to the receiver
-    let custody = ctx.accounts.custody.as_mut();
+    // transfer token fees from the custody to the receiver
+    if params.token_amount > 0 {
+        let custody = ctx.accounts.custody.as_mut();
+        msg!(
+            "Withdraw token fees: {} / {}",
+            params.token_amount,
+            custody.collected_fees
+        );
+        if custody.collected_fees < params.token_amount {
+            return Err(ProgramError::InsufficientFunds.into());
+        }
+        custody.collected_fees = math::checked_sub(custody.collected_fees, params.token_amount)?;
 
-    if custody.collected_fees < params.amount {
-        return Err(ProgramError::InsufficientFunds.into());
+        ctx.accounts.launchpad.transfer_tokens(
+            ctx.accounts.custody_token_account.to_account_info(),
+            ctx.accounts.receiving_token_account.to_account_info(),
+            ctx.accounts.transfer_authority.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+            params.token_amount,
+        )?;
     }
-    custody.collected_fees = math::checked_sub(custody.collected_fees, params.amount)?;
 
-    ctx.accounts.launchpad.transfer_tokens(
-        ctx.accounts.custody_token_account.to_account_info(),
-        ctx.accounts.receiving_account.to_account_info(),
-        ctx.accounts.transfer_authority.clone(),
-        ctx.accounts.token_program.to_account_info(),
-        params.amount,
-    )?;
+    // transfer sol fees from the custody to the receiver
+    if params.sol_amount > 0 {
+        msg!(
+            "Withdraw SOL fees: {} / {}",
+            params.sol_amount,
+            ctx.accounts.transfer_authority.try_lamports()?
+        );
+        state::transfer_sol_from_owned(
+            ctx.accounts.transfer_authority.to_account_info(),
+            ctx.accounts.receiving_sol_account.to_account_info(),
+            params.sol_amount,
+        )?;
+    }
 
     Ok(0)
 }

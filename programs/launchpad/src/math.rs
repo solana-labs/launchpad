@@ -332,3 +332,14 @@ where
         err!(LaunchpadError::MathOverflow)
     }
 }
+
+pub fn to_ui_amount(amount: u64, decimals: u8) -> Result<f64> {
+    return checked_float_div(amount as f64, checked_powi(10.0, decimals as i32)?);
+}
+
+pub fn to_token_amount(ui_amount: f64, decimals: u8) -> Result<u64> {
+    return checked_as_u64(checked_float_mul(
+        ui_amount,
+        checked_powi(10.0, decimals as i32)?,
+    )?);
+}

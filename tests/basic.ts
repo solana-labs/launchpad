@@ -30,8 +30,8 @@ describe("launchpad", () => {
         allowWithdrawals: true,
       },
       fees: {
-        newAuction: { numerator: "1", denominator: "100" },
-        auctionUpdate: { numerator: "1", denominator: "100" },
+        newAuction: new BN(100),
+        auctionUpdate: new BN(100),
         invalidBid: { numerator: "1", denominator: "100" },
         trade: { numerator: "1", denominator: "100" },
       },
@@ -89,8 +89,8 @@ describe("launchpad", () => {
 
   it("setFees", async () => {
     launchpadExpected.fees = {
-      newAuction: { numerator: new BN(1), denominator: new BN(1000) },
-      auctionUpdate: { numerator: new BN(1), denominator: new BN(1000) },
+      newAuction: new BN(10000),
+      auctionUpdate: new BN(100000),
       invalidBid: { numerator: new BN(1), denominator: new BN(1000) },
       trade: { numerator: new BN(1), denominator: new BN(1000) },
     };
@@ -191,6 +191,8 @@ describe("launchpad", () => {
         presaleEndTime: new BN(222),
         fillLimitRegAddress: new BN(10),
         fillLimitWlAddress: new BN(20),
+        orderLimitRegAddress: new BN(5),
+        orderLimitWlAddress: new BN(10),
       },
       payment: {
         acceptSol: true,
@@ -204,10 +206,12 @@ describe("launchpad", () => {
         maxPrice: new BN(200),
         minPrice: new BN(90),
         repriceDelay: new BN(5),
+        repriceCoef: new BN(1000),
         repriceFunction: { linear: {} },
         amountFunction: { fixed: {} },
         amountPerLevel: new BN(200),
         tickSize: new BN(2),
+        unitSize: lpd.toTokenAmount(1, lpd.dispensingCustodies[0].decimals),
       },
       tokenRatios: [new BN(1), new BN(2)],
     };
@@ -353,6 +357,7 @@ describe("launchpad", () => {
 
   it("setTestOraclePrice", async () => {
     await lpd.setTestOraclePrice(123, lpd.paymentCustody);
+    await lpd.setTestOraclePrice(200, lpd.pricingCustody);
 
     let oracle = await lpd.program.account.testOracle.fetch(
       lpd.paymentCustody.oracleAccount
@@ -367,7 +372,7 @@ describe("launchpad", () => {
   });
 
   it("setTestTime", async () => {
-    await lpd.setTestTime(new BN(111));
+    await lpd.setTestTime(111);
 
     let auction = await lpd.program.account.auction.fetch(
       lpd.auction.publicKey
@@ -384,9 +389,7 @@ describe("launchpad", () => {
     ]);
 
     let bid = await lpd.program.account.bid.fetch(
-      (
-        await lpd.getBidAddress(lpd.users[1].wallet.publicKey)
-      ).publicKey
+      await lpd.getBidAddress(lpd.users[1].wallet.publicKey)
     );
     let bidExpected = {
       owner: lpd.users[1].wallet.publicKey,
@@ -399,6 +402,8 @@ describe("launchpad", () => {
       bidType: { ioc: {} },
       filled: new BN(0),
       fillTime: new BN(0),
+      fillPrice: new BN(0),
+      fillAmount: new BN(0),
       bump: bid.bump,
     };
     expect(JSON.stringify(bid)).to.equal(JSON.stringify(bidExpected));
@@ -408,9 +413,7 @@ describe("launchpad", () => {
     await lpd.whitelistRemove([lpd.users[1].wallet.publicKey]);
 
     let bid = await lpd.program.account.bid.fetch(
-      (
-        await lpd.getBidAddress(lpd.users[1].wallet.publicKey)
-      ).publicKey
+      await lpd.getBidAddress(lpd.users[1].wallet.publicKey)
     );
     let bidExpected = {
       owner: lpd.users[1].wallet.publicKey,
@@ -423,6 +426,8 @@ describe("launchpad", () => {
       bidType: { ioc: {} },
       filled: new BN(0),
       fillTime: new BN(0),
+      fillPrice: new BN(0),
+      fillAmount: new BN(0),
       bump: bid.bump,
     };
     expect(JSON.stringify(bid)).to.equal(JSON.stringify(bidExpected));
@@ -441,81 +446,159 @@ describe("launchpad", () => {
   });
 
   it("placeBid", async () => {
-    /*let user = lpd.users[0];
+    let user = lpd.users[0];
+
+    // record initial balances
     let initialBalancePayment = await lpd.getBalance(user.paymentAccount);
     let initialBalancesReceiving = [];
-    for (const account of user.receivingAccounts) {
-      initialBalancesReceiving.push(await lpd.getBalance(account));
+    for (const meta of user.receivingAccountMetas) {
+      initialBalancesReceiving.push(await lpd.getBalance(meta.pubkey));
     }
+    let initialReceivingSum = initialBalancesReceiving.reduce(
+      (a, b) => a + b,
+      0
+    );
 
+    // place the bid
     let bidAmount = 1;
     let bidPrice = 100;
+    let bidType = { ioc: {} };
+    let availAmount = (await lpd.getAuctionAmount(bidPrice)).toNumber();
     await lpd.placeBid(bidPrice, bidAmount, bidType, user);
 
+    // check updated balances
     let balancePayment = await lpd.getBalance(user.paymentAccount);
-    console.log(initialBalancePayment, balancePayment);
+    /*expect(balancePayment).to.equal(
+      initialBalancePayment -
+        lpd.toTokenAmount(bidPrice, lpd.paymentCustody.decimals).toNumber()
+    );*/
+    //initialBalancePayment - pricePerToken * fillAmount;
+
     let balancesReceiving = [];
-    for (const account of user.receivingAccounts) {
-      balancesReceiving.push(await lpd.getBalance(account));
-      console.log(await lpd.getBalance(account));
+    for (const meta of user.receivingAccountMetas) {
+      balancesReceiving.push(await lpd.getBalance(meta.pubkey));
     }
+    let expectedFillAmount =
+      Math.min(bidAmount, availAmount) *
+      auctionParams.pricing.unitSize.toNumber();
+    let receivingSum = balancesReceiving.reduce((a, b) => a + b, 0);
+    expect(receivingSum).to.equal(initialReceivingSum + expectedFillAmount);
 
+    // check bid account
     let bid = await lpd.program.account.bid.fetch(
-      (await lpd.getBidAddress(lpd.users[0].wallet.publicKey)).publicKey
+      await lpd.getBidAddress(user.wallet.publicKey)
     );
-    console.log(JSON.stringify(bid));
+    let auction = await lpd.program.account.auction.fetch(
+      lpd.auction.publicKey
+    );
+    //expect(auction).to.equal(auctionExpected);
+    let bidExpected = {
+      owner: user.wallet.publicKey,
+      auction: lpd.auction.publicKey,
+      whitelisted: true,
+      sellerInitialized: true,
+      bidTime: auction.creationTime,
+      bidPrice: lpd.toTokenAmount(bidPrice, lpd.pricingCustody.decimals),
+      bidAmount: new BN(bidAmount),
+      bidType: bidType,
+      filled: new BN(bidAmount),
+      fillTime: auction.creationTime,
+      fillPrice: new BN(100),
+      fillAmount: new BN(bidAmount),
+      bump: bid.bump,
+    };
+    expect(JSON.stringify(bid)).to.equal(JSON.stringify(bidExpected));
 
+    // check seller's balance account
     let sellerBalance = await lpd.program.account.sellerBalance.fetch(
-      (await lpd.getBidAddress(lpd.seller.balanceAccount)).publicKey
+      lpd.seller.balanceAccount
     );
     console.log(JSON.stringify(sellerBalance));
-*/
-    //expect(balance).to.equal(initialBalance + withdrawAmount);
   });
 
   it("cancelBid", async () => {
-    /*  let user = lpd.users[0];
-    let initialBalanceSol = await lpd.getBalance(user.wallet.publicKey);
+    await lpd.setTestTime(22222);
 
-    await lpd.cancelBid();
+    let user = lpd.users[0];
+    let initializer = lpd.seller;
+    let initialBalanceSol = await lpd.getSolBalance(
+      initializer.wallet.publicKey
+    );
 
-    let balanceSol = await lpd.getBalance(user.wallet.publicKey);
-    console.log(initialBalanceSol, balanceSol);
+    await lpd.cancelBid(user, initializer);
 
-    try {
-      let bid = await lpd.program.account.bid.fetch(
-        (await lpd.getBidAddress(lpd.users[0].wallet.publicKey)).publicKey
-      );
-      assert(false, "Fetch Bid should've been failed");
-    } catch (err) {}
-    */
+    let balanceSol = await lpd.getSolBalance(initializer.wallet.publicKey);
+    expect(initialBalanceSol).to.lessThan(balanceSol);
+
+    await lpd.ensureFails(
+      lpd.program.account.bid.fetch(
+        await lpd.getBidAddress(initializer.wallet.publicKey)
+      ),
+      "Fetch Bid should've been failed"
+    );
   });
 
   it("withdrawFees", async () => {
-    /*let initialBalance = await lpd.getBalance(lpd.feesAccount);
-    let withdrawAmount = 1;
-    await lpd.withdrawFees(withdrawAmount, lpd.paymentCustody, lpd.feesAccount);
-    let balance = await lpd.getBalance(lpd.feesAccount);
-    expect(balance).to.equal(initialBalance + withdrawAmount);*/
+    let initialBalanceTokens = await lpd.getBalance(lpd.feesAccount);
+    let withdrawAmountTokens = (
+      await lpd.program.account.custody.fetch(lpd.paymentCustody.custody)
+    ).collectedFees.toNumber();
+    expect(withdrawAmountTokens).to.greaterThan(0);
+
+    let initialBalanceSol = await lpd.getSolBalance(lpd.admins[0].publicKey);
+    let withdrawAmountSol = await lpd.getSolBalance(lpd.authority.publicKey);
+    expect(withdrawAmountSol).to.greaterThan(0);
+
+    await lpd.withdrawFees(
+      withdrawAmountTokens,
+      withdrawAmountSol,
+      lpd.paymentCustody,
+      lpd.feesAccount,
+      lpd.admins[0].publicKey
+    );
+
+    let balanceTokens = await lpd.getBalance(lpd.feesAccount);
+    expect(balanceTokens).to.equal(initialBalanceTokens + withdrawAmountTokens);
+
+    let balanceSol = await lpd.getSolBalance(lpd.admins[0].publicKey);
+    expect(balanceSol).to.equal(initialBalanceSol + withdrawAmountSol);
   });
 
   it("withdrawFunds", async () => {
-    /*let initialBalance = await lpd.getBalance(lpd.seller.paymentAccount);
-    let withdrawAmount = 1;
+    let initialBalance = await lpd.getBalance(lpd.seller.paymentAccount);
+    let withdrawAmount = (
+      await lpd.program.account.sellerBalance.fetch(lpd.seller.balanceAccount)
+    ).balance.toNumber();
+    expect(withdrawAmount).to.greaterThan(0);
+
     await lpd.withdrawFunds(
       withdrawAmount,
       lpd.paymentCustody,
       lpd.seller.paymentAccount
     );
+
     let balance = await lpd.getBalance(lpd.seller.paymentAccount);
-    expect(balance).to.equal(initialBalance + withdrawAmount);*/
+    expect(balance).to.equal(initialBalance + withdrawAmount);
   });
 
   it("deleteAuction", async () => {
+    for (let i = 0; i < lpd.dispensingCustodies.length; ++i) {
+      await lpd.removeTokens(
+        lpd.toUiAmount(
+          await lpd.getBalance(lpd.dispensingCustodies[i].tokenAccount),
+          lpd.dispensingCustodies[i].decimals
+        ),
+        i
+      );
+    }
     await lpd.deleteAuction();
-    try {
-      await lpd.program.account.auction.fetch(lpd.auction.publicKey);
-      assert(false, "Fetch Auction should've been failed");
-    } catch (err) {}
+    await lpd.ensureFails(
+      lpd.program.account.auction.fetch(lpd.auction.publicKey),
+      "Fetch Auction should've been failed"
+    );
+    await lpd.ensureFails(
+      lpd.getTokenAccount(lpd.dispensingCustodies[0].tokenAccount),
+      "Get dispensing token account should've been failed"
+    );
   });
 });

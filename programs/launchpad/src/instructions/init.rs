@@ -68,8 +68,8 @@ pub struct InitParams {
     pub allow_auction_pullouts: bool,
     pub allow_new_bids: bool,
     pub allow_withdrawals: bool,
-    pub new_auction_fee: Fee,
-    pub auction_update_fee: Fee,
+    pub new_auction_fee: u64,
+    pub auction_update_fee: u64,
     pub invalid_bid_fee: Fee,
     pub trade_fee: Fee,
 }

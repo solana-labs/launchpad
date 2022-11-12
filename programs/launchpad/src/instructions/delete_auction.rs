@@ -81,23 +81,38 @@ pub fn delete_auction<'info>(
         return Ok(signatures_left);
     }
 
-    if !ctx.remaining_accounts.is_empty() {
+    let auction = &ctx.accounts.auction;
+    if !ctx.remaining_accounts.is_empty() && auction.num_tokens > 0 {
+        if ctx.remaining_accounts.len() > auction.num_tokens.into() {
+            return err!(LaunchpadError::TooManyAccountKeys);
+        }
+        if ctx.remaining_accounts.len() < auction.num_tokens.into() {
+            return Err(ProgramError::NotEnoughAccountKeys.into());
+        }
         let dispensers = state::load_accounts::<TokenAccount>(
-            &ctx.remaining_accounts[..Auction::MAX_TOKENS],
+            &ctx.remaining_accounts[..auction.num_tokens.into()],
             &Token::id(),
         )?;
-        // TODO check addresses
-        for dispenser in &dispensers {
-            if dispenser.owner != crate::ID {
-                return Err(ProgramError::IllegalOwner.into());
-            }
-        }
-        for account in &dispensers {
-            if account.amount > 0 {
-                msg!("Non-empty dispensing account: {}", account.key());
+        for i in 0..dispensers.len() {
+            require_keys_eq!(
+                dispensers[i].key(),
+                auction.tokens[i].account,
+                LaunchpadError::InvalidDispenserAddress
+            );
+            if dispensers[i].amount > 0 {
+                msg!("Non-empty dispensing account: {}", dispensers[i].key());
                 return err!(LaunchpadError::AuctionNotEmpty);
             }
-            // TODO close token account here
+            state::close_token_account(
+                ctx.accounts.transfer_authority.to_account_info(),
+                ctx.remaining_accounts[i].clone(),
+                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.transfer_authority.to_account_info(),
+                &[&[
+                    b"transfer_authority",
+                    &[ctx.accounts.launchpad.transfer_authority_bump],
+                ]],
+            )?;
         }
     }
 

@@ -4,7 +4,8 @@ use {
     crate::{
         error::LaunchpadError,
         state::{
-            auction::{Auction, AuctionStats, CommonParams, PaymentParams, PricingParams},
+            self,
+            auction::{Auction, CommonParams, PaymentParams, PricingParams},
             launchpad::Launchpad,
         },
     },
@@ -13,10 +14,19 @@ use {
 
 #[derive(Accounts)]
 pub struct UpdateAuction<'info> {
-    #[account()]
+    #[account(mut)]
     pub owner: Signer<'info>,
 
+    /// CHECK: empty PDA, authority for token accounts
     #[account(
+        mut,
+        seeds = [b"transfer_authority"],
+        bump = launchpad.transfer_authority_bump
+    )]
+    pub transfer_authority: AccountInfo<'info>,
+
+    #[account(
+        mut,
         seeds = [b"launchpad"],
         bump = launchpad.launchpad_bump
     )]
@@ -29,6 +39,8 @@ pub struct UpdateAuction<'info> {
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
+
+    system_program: Program<'info, System>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -44,6 +56,19 @@ pub fn update_auction(ctx: Context<UpdateAuction>, params: &UpdateAuctionParams)
         ctx.accounts.launchpad.permissions.allow_auction_updates,
         LaunchpadError::AuctionUpdatesNotAllowed
     );
+
+    // collect fee
+    let launchpad = ctx.accounts.launchpad.as_mut();
+    state::transfer_sol(
+        ctx.accounts.owner.to_account_info(),
+        ctx.accounts.transfer_authority.to_account_info(),
+        ctx.accounts.system_program.to_account_info(),
+        launchpad.fees.auction_update,
+    )?;
+    launchpad.collected_fees.auction_update_sol = launchpad
+        .collected_fees
+        .auction_update_sol
+        .wrapping_add(launchpad.fees.auction_update);
 
     // update auction data
     let auction = ctx.accounts.auction.as_mut();

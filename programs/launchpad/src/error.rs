@@ -22,8 +22,14 @@ pub enum LaunchpadError {
     InvalidTokenAmount,
     #[msg("Too many remaining accounts")]
     TooManyAccountKeys,
-    #[msg("Invalid Bid address")]
+    #[msg("Invalid bid account address")]
     InvalidBidAddress,
+    #[msg("Invalid dispensing account address")]
+    InvalidDispenserAddress,
+    #[msg("Dispensing accounts should have the same decimals")]
+    InvalidDispenserDecimals,
+    #[msg("Invalid seller's balance address")]
+    InvalidSellerBalanceAddress,
     #[msg("New auctions are not allowed at this time")]
     NewAuctionsNotAllowed,
     #[msg("Auction updates are not allowed at this time")]
@@ -38,6 +44,8 @@ pub enum LaunchpadError {
     WithdrawalsNotAllowed,
     #[msg("Instruction is not allowed in production")]
     InvalidEnvironment,
+    #[msg("Auction hasn't started")]
+    AuctionNotStarted,
     #[msg("Auction has been ended")]
     AuctionEnded,
     #[msg("Auction is empty")]
@@ -48,6 +56,8 @@ pub enum LaunchpadError {
     AuctionNotUpdatable,
     #[msg("Auction with fixed amount")]
     AuctionWithFixedAmount,
+    #[msg("Auction is still in progress")]
+    AuctionInProgress,
     #[msg("Overflow in arithmetic operation")]
     MathOverflow,
     #[msg("Unsupported price oracle")]
@@ -66,4 +76,10 @@ pub enum LaunchpadError {
     BidAmountTooLarge,
     #[msg("Bid price is too small")]
     BidPriceTooSmall,
+    #[msg("Fill limit exceeded")]
+    FillAmountLimit,
+    #[msg("Unexpected price calculation error")]
+    PriceCalcError,
+    #[msg("This instruction must be all alone in the transaction")]
+    MustBeSingleInstruction,
 }

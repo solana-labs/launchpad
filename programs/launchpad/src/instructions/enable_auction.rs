@@ -1,7 +1,7 @@
 //! EnableAuction instruction handler
 
 use {
-    crate::{state::auction::Auction, error::LaunchpadError},
+    crate::state::auction::Auction,
     anchor_lang::prelude::*,
 };
 

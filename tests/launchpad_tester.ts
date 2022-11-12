@@ -7,7 +7,8 @@ import {
   SystemProgram,
   AccountMeta,
   SYSVAR_RENT_PUBKEY,
-  SYSVAR_RECENT_BLOCKHASHES_PUBKEY,
+  SYSVAR_SLOT_HASHES_PUBKEY,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
 } from "@solana/web3.js";
 import * as spl from "@solana/spl-token";
 import { BN } from "bn.js";
@@ -50,12 +51,13 @@ export class LaunchpadTester {
     bump: number;
     decimals: number;
   }[];
-  dispensingMetas: AccountMeta[];
+  dispensingAccountMetas: AccountMeta[];
+  dispensingMintMetas: AccountMeta[];
 
   users: {
     wallet: Keypair;
     paymentAccount: PublicKey;
-    receivingAccounts: PublicKey[];
+    receivingAccountMetas: AccountMeta[];
   }[];
   seller: {
     wallet: Keypair;
@@ -101,7 +103,8 @@ export class LaunchpadTester {
     this.paymentCustody = await this.generateCustody(6);
 
     this.dispensingCustodies = [];
-    this.dispensingMetas = [];
+    this.dispensingAccountMetas = [];
+    this.dispensingMintMetas = [];
     for (let i = 0; i < NUM_TOKENS; ++i) {
       let mint = Keypair.generate();
       let tokenAccount = await this.findProgramAddress("dispense", [
@@ -114,17 +117,15 @@ export class LaunchpadTester {
         bump: tokenAccount.bump,
         decimals: 8,
       });
-      this.dispensingMetas.push({
+      this.dispensingAccountMetas.push({
         isSigner: false,
         isWritable: true,
         pubkey: tokenAccount.publicKey,
       });
-    }
-    for (let i = 0; i < NUM_TOKENS; ++i) {
-      this.dispensingMetas.push({
+      this.dispensingMintMetas.push({
         isSigner: false,
         isWritable: false,
-        pubkey: this.dispensingCustodies[i].mint.publicKey,
+        pubkey: mint.publicKey,
       });
     }
 
@@ -181,23 +182,31 @@ export class LaunchpadTester {
         this.paymentCustody.mint.publicKey,
         wallet.publicKey
       );
+      await this.mintTokens(
+        1000,
+        this.paymentCustody.decimals,
+        this.paymentCustody.mint.publicKey,
+        paymentAccount
+      );
 
-      let receivingAccounts = [];
+      let receivingAccountMetas = [];
       for (const custody of this.dispensingCustodies) {
-        receivingAccounts.push(
-          await spl.createAssociatedTokenAccount(
+        receivingAccountMetas.push({
+          isSigner: false,
+          isWritable: true,
+          pubkey: await spl.createAssociatedTokenAccount(
             this.provider.connection,
             this.admins[0],
             custody.mint.publicKey,
             wallet.publicKey
-          )
-        );
+          ),
+        });
       }
 
       this.users.push({
         wallet: wallet,
         paymentAccount: paymentAccount,
-        receivingAccounts: receivingAccounts,
+        receivingAccountMetas: receivingAccountMetas,
       });
     }
 
@@ -232,6 +241,7 @@ export class LaunchpadTester {
 
     let balanceAccount = (
       await this.findProgramAddress("seller_balance", [
+        wallet.publicKey,
         this.paymentCustody.custody,
       ])
     ).publicKey;
@@ -251,7 +261,7 @@ export class LaunchpadTester {
   };
 
   mintTokens = async (
-    ui_amount: number,
+    uiAmount: number,
     decimals: number,
     mint: PublicKey,
     destiantionWallet: PublicKey
@@ -262,7 +272,7 @@ export class LaunchpadTester {
       mint,
       destiantionWallet,
       this.admins[0],
-      ui_amount * 10 ** decimals,
+      this.toTokenAmount(uiAmount, decimals).toNumber(),
       decimals
     );
   };
@@ -334,6 +344,17 @@ export class LaunchpadTester {
       .catch(() => 0);
   };
 
+  getSolBalance = async (pubkey: PublicKey) => {
+    return this.provider.connection
+      .getBalance(pubkey)
+      .then((balance) => balance)
+      .catch(() => 0);
+  };
+
+  getTokenAccount = async (pubkey: PublicKey) => {
+    return spl.getAccount(this.provider.connection, pubkey);
+  };
+
   getTime() {
     const now = new Date();
     const utcMilllisecondsSinceEpoch =
@@ -341,15 +362,21 @@ export class LaunchpadTester {
     return utcMilllisecondsSinceEpoch / 1000;
   }
 
-  toTokenAmount(ui_amount: number, decimals: number) {
-    return new BN(ui_amount).imul(new BN(10).pow(new BN(decimals)));
+  toTokenAmount(uiAmount: number, decimals: number) {
+    return new BN(uiAmount * 10 ** decimals);
+  }
+
+  toUiAmount(token_amount: number, decimals: number) {
+    return token_amount / 10 ** decimals;
   }
 
   getBidAddress = async (pubkey: PublicKey) => {
-    return this.findProgramAddress("bid", [pubkey, this.auction.publicKey]);
+    return (
+      await this.findProgramAddress("bid", [pubkey, this.auction.publicKey])
+    ).publicKey;
   };
 
-  ensureFails = async (promise) => {
+  ensureFails = async (promise, message = null) => {
     let printErrors = this.printErrors;
     this.printErrors = false;
     let res = null;
@@ -360,7 +387,7 @@ export class LaunchpadTester {
     }
     this.printErrors = printErrors;
     if (!res) {
-      throw new Error("Call should've failed");
+      throw new Error(message ? message : "Call should've failed");
     }
     return res;
   };
@@ -379,8 +406,8 @@ export class LaunchpadTester {
           allowAuctionPullouts: true,
           allowNewBids: true,
           allowWithdrawals: true,
-          newAuctionFee: { numerator: new BN(1), denominator: new BN(100) },
-          auctionUpdateFee: { numerator: new BN(1), denominator: new BN(100) },
+          newAuctionFee: new BN(100),
+          auctionUpdateFee: new BN(100),
           invalidBidFee: { numerator: new BN(1), denominator: new BN(100) },
           tradeFee: { numerator: new BN(1), denominator: new BN(100) },
         })
@@ -530,7 +557,13 @@ export class LaunchpadTester {
     }
   };
 
-  withdrawFees = async (ui_amount: number, custody, receivingAccount) => {
+  withdrawFees = async (
+    tokenAmount: number,
+    solAmount: number,
+    custody,
+    receivingTokenAccount,
+    receivingSolAccount
+  ) => {
     let multisig = await this.program.account.multisig.fetch(
       this.multisig.publicKey
     );
@@ -538,7 +571,8 @@ export class LaunchpadTester {
       try {
         await this.program.methods
           .withdrawFees({
-            amount: this.toTokenAmount(ui_amount, custody.decimals),
+            tokenAmount: new BN(tokenAmount),
+            solAmount: new BN(solAmount),
           })
           .accounts({
             admin: this.admins[i].publicKey,
@@ -547,7 +581,8 @@ export class LaunchpadTester {
             launchpad: this.launchpad.publicKey,
             custody: custody.custody,
             custodyTokenAccount: custody.tokenAccount,
-            receivingAccount: receivingAccount,
+            receivingTokenAccount: receivingTokenAccount,
+            receivingSolAccount: receivingSolAccount,
             tokenProgram: spl.TOKEN_PROGRAM_ID,
           })
           .signers([this.admins[i]])
@@ -577,6 +612,7 @@ export class LaunchpadTester {
             auction: this.auction.publicKey,
             tokenProgram: spl.TOKEN_PROGRAM_ID,
           })
+          .remainingAccounts(this.dispensingAccountMetas)
           .signers([this.admins[i]])
           .rpc();
       } catch (err) {
@@ -620,7 +656,7 @@ export class LaunchpadTester {
     }
   };
 
-  setTestTime = async (time) => {
+  setTestTime = async (time: number) => {
     let multisig = await this.program.account.multisig.fetch(
       this.multisig.publicKey
     );
@@ -628,7 +664,7 @@ export class LaunchpadTester {
       try {
         await this.program.methods
           .setTestTime({
-            time: time,
+            time: new BN(time),
           })
           .accounts({
             admin: this.admins[i].publicKey,
@@ -647,11 +683,6 @@ export class LaunchpadTester {
   };
 
   initAuction = async (params) => {
-    let bumps = [];
-    for (const custody of this.dispensingCustodies) {
-      bumps.push(custody.bump);
-    }
-    params.dispenserBumps = Buffer.from(bumps);
     try {
       await this.program.methods
         .initAuction(params)
@@ -665,7 +696,10 @@ export class LaunchpadTester {
           tokenProgram: spl.TOKEN_PROGRAM_ID,
           rent: SYSVAR_RENT_PUBKEY,
         })
-        .remainingAccounts(this.dispensingMetas)
+        .remainingAccounts([
+          ...this.dispensingAccountMetas,
+          ...this.dispensingMintMetas,
+        ])
         .signers([this.seller.wallet])
         .rpc();
     } catch (err) {
@@ -682,8 +716,10 @@ export class LaunchpadTester {
         .updateAuction(params)
         .accounts({
           owner: this.seller.wallet.publicKey,
+          transferAuthority: this.authority.publicKey,
           launchpad: this.launchpad.publicKey,
           auction: this.auction.publicKey,
+          systemProgram: SystemProgram.programId,
         })
         .signers([this.seller.wallet])
         .rpc();
@@ -731,12 +767,12 @@ export class LaunchpadTester {
     }
   };
 
-  addTokens = async (ui_amount: number, custodyId: number) => {
+  addTokens = async (uiAmount: number, custodyId: number) => {
     try {
       await this.program.methods
         .addTokens({
           amount: this.toTokenAmount(
-            ui_amount,
+            uiAmount,
             this.dispensingCustodies[custodyId].decimals
           ),
         })
@@ -763,12 +799,12 @@ export class LaunchpadTester {
     }
   };
 
-  removeTokens = async (ui_amount: number, custodyId: number) => {
+  removeTokens = async (uiAmount: number, custodyId: number) => {
     try {
       await this.program.methods
         .removeTokens({
           amount: this.toTokenAmount(
-            ui_amount,
+            uiAmount,
             this.dispensingCustodies[custodyId].decimals
           ),
         })
@@ -793,21 +829,17 @@ export class LaunchpadTester {
 
   whitelistAdd = async (addresses: PublicKey[]) => {
     let bids = [];
-    let bumps = [];
     for (const address of addresses) {
-      let bid = await this.getBidAddress(address);
       bids.push({
         isSigner: false,
         isWritable: true,
-        pubkey: bid.publicKey,
+        pubkey: await this.getBidAddress(address),
       });
-      bumps.push(bid.bump);
     }
     try {
       await this.program.methods
         .whitelistAdd({
           addresses: addresses,
-          bumps: Buffer.from(bumps),
         })
         .accounts({
           owner: this.seller.wallet.publicKey,
@@ -827,21 +859,16 @@ export class LaunchpadTester {
 
   whitelistRemove = async (addresses: PublicKey[]) => {
     let bids = [];
-    let bumps = [];
     for (const address of addresses) {
-      let bid = await this.getBidAddress(address);
       bids.push({
         isSigner: false,
         isWritable: true,
-        pubkey: bid.publicKey,
+        pubkey: await this.getBidAddress(address),
       });
-      bumps.push(bid.bump);
     }
     try {
       await this.program.methods
-        .whitelistRemove({
-          bumps: Buffer.from(bumps),
-        })
+        .whitelistRemove({})
         .accounts({
           owner: this.seller.wallet.publicKey,
           auction: this.auction.publicKey,
@@ -857,16 +884,17 @@ export class LaunchpadTester {
     }
   };
 
-  withdrawFunds = async (ui_amount: number, custody, receivingAccount) => {
+  withdrawFunds = async (amount: number, custody, receivingAccount) => {
     try {
       await this.program.methods
         .withdrawFunds({
-          amount: this.toTokenAmount(ui_amount, custody.decimals),
+          amount: new BN(amount),
         })
         .accounts({
           owner: this.seller.wallet.publicKey,
           transferAuthority: this.authority.publicKey,
           launchpad: this.launchpad.publicKey,
+          auction: this.auction.publicKey,
           custody: custody.custody,
           custodyTokenAccount: custody.tokenAccount,
           sellerBalance: this.seller.balanceAccount,
@@ -903,11 +931,11 @@ export class LaunchpadTester {
     }
   };
 
-  getAuctionPrice = async (ui_amount: number) => {
+  getAuctionPrice = async (uiAmount: number) => {
     try {
       return await this.program.methods
         .getAuctionPrice({
-          amount: this.toTokenAmount(ui_amount, this.pricingCustody.decimals),
+          amount: this.toTokenAmount(uiAmount, this.pricingCustody.decimals),
         })
         .accounts({
           user: this.provider.wallet.publicKey,
@@ -923,15 +951,12 @@ export class LaunchpadTester {
     }
   };
 
-  placeBid = async (price: number, ui_amount: number, bidType, user) => {
+  placeBid = async (price: number, amount: number, bidType, user) => {
     try {
       await this.program.methods
         .placeBid({
-          price: this.toTokenAmount(price, this.paymentCustody.decimals),
-          amount: this.toTokenAmount(
-            ui_amount,
-            this.dispensingCustodies[custodyId].decimals
-          ),
+          price: this.toTokenAmount(price, this.pricingCustody.decimals),
+          amount: new BN(amount),
           bidType: bidType,
         })
         .accounts({
@@ -941,15 +966,21 @@ export class LaunchpadTester {
           launchpad: this.launchpad.publicKey,
           auction: this.auction.publicKey,
           sellerBalance: this.seller.balanceAccount,
-          bid: (await this.getBidAddress(user.wallet.publicKey)).publicKey,
+          bid: await this.getBidAddress(user.wallet.publicKey),
           pricingCustody: this.pricingCustody.custody,
           pricingOracleAccount: this.pricingCustody.oracleAccount,
           paymentCustody: this.paymentCustody.custody,
           paymentOracleAccount: this.paymentCustody.oracleAccount,
-          recentSlothashes: SYSVAR_RECENT_BLOCKHASHES_PUBKEY,
+          paymentTokenAccount: this.paymentCustody.tokenAccount,
+          recentSlothashes: SYSVAR_SLOT_HASHES_PUBKEY,
+          instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
           systemProgram: SystemProgram.programId,
           tokenProgram: spl.TOKEN_PROGRAM_ID,
         })
+        .remainingAccounts([
+          ...user.receivingAccountMetas,
+          ...this.dispensingAccountMetas,
+        ])
         .signers([user.wallet])
         .rpc();
     } catch (err) {
@@ -960,16 +991,16 @@ export class LaunchpadTester {
     }
   };
 
-  cancelBid = async (user) => {
+  cancelBid = async (user, initializer) => {
     try {
       await this.program.methods
         .cancelBid({})
         .accounts({
-          owner: user.wallet.publicKey,
+          initializer: initializer.wallet.publicKey,
           auction: this.auction.publicKey,
-          bid: (await this.getBidAddress(user.wallet.publicKey)).publicKey,
+          bid: await this.getBidAddress(user.wallet.publicKey),
         })
-        .signers([user.wallet])
+        .signers([initializer.wallet])
         .rpc();
     } catch (err) {
       if (this.printErrors) {

@@ -13,7 +13,7 @@ use {
         },
     },
     anchor_lang::prelude::*,
-    anchor_spl::token::{Token, TokenAccount},
+    anchor_spl::token::Token,
 };
 
 #[derive(Accounts)]
@@ -24,12 +24,14 @@ pub struct InitAuction<'info> {
 
     /// CHECK: empty PDA, authority for token accounts
     #[account(
+        mut,
         seeds = [b"transfer_authority"],
         bump = launchpad.transfer_authority_bump
     )]
     pub transfer_authority: AccountInfo<'info>,
 
     #[account(
+        mut,
         seeds = [b"launchpad"],
         bump = launchpad.launchpad_bump
     )]
@@ -68,7 +70,6 @@ pub struct InitAuctionParams {
     pub payment: PaymentParams,
     pub pricing: PricingParams,
     pub token_ratios: Vec<u64>,
-    pub dispenser_bumps: Vec<u8>,
 }
 
 pub fn init_auction<'info>(
@@ -80,8 +81,20 @@ pub fn init_auction<'info>(
         LaunchpadError::NewAuctionsNotAllowed
     );
 
+    // collect fee
+    let launchpad = ctx.accounts.launchpad.as_mut();
+    state::transfer_sol(
+        ctx.accounts.owner.to_account_info(),
+        ctx.accounts.transfer_authority.to_account_info(),
+        ctx.accounts.system_program.to_account_info(),
+        launchpad.fees.new_auction,
+    )?;
+    launchpad.collected_fees.new_auction_sol = launchpad
+        .collected_fees
+        .new_auction_sol
+        .wrapping_add(launchpad.fees.new_auction);
+
     // create dispensing accounts
-    // TODO check addresses
     if ctx.remaining_accounts.is_empty() || ctx.remaining_accounts.len() % 2 != 0 {
         return Err(ProgramError::NotEnoughAccountKeys.into());
     }
@@ -93,7 +106,6 @@ pub fn init_auction<'info>(
     let dispensers = state::create_token_accounts(
         &ctx.remaining_accounts[..accounts_half_len],
         &ctx.remaining_accounts[accounts_half_len..],
-        &params.dispenser_bumps,
         ctx.accounts.transfer_authority.to_account_info(),
         ctx.accounts.owner.to_account_info(),
         &ctx.accounts.auction.key(),
@@ -101,7 +113,6 @@ pub fn init_auction<'info>(
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.rent.to_account_info(),
     )?;
-    //state::save_accounts(&dispensers)?;
 
     require_keys_eq!(
         ctx.accounts.pricing_custody.key(),

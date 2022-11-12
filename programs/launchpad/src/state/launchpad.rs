@@ -1,4 +1,4 @@
-use {anchor_lang::prelude::*, anchor_spl::token::Transfer};
+use {crate::math, anchor_lang::prelude::*, anchor_spl::token::Transfer};
 
 #[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct Fee {
@@ -8,8 +8,8 @@ pub struct Fee {
 
 #[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct Fees {
-    pub new_auction: Fee,
-    pub auction_update: Fee,
+    pub new_auction: u64,
+    pub auction_update: u64,
     pub invalid_bid: Fee,
     pub trade: Fee,
 }
@@ -42,6 +42,22 @@ pub struct Launchpad {
     pub launchpad_bump: u8,
 }
 
+impl Fee {
+    pub fn is_zero(&self) -> bool {
+        return self.numerator == 0;
+    }
+
+    pub fn get_fee_amount(&self, amount: u64) -> Result<u64> {
+        if self.is_zero() {
+            return Ok(0);
+        }
+        Ok(math::checked_as_u64(math::checked_ceil_div(
+            math::checked_mul(amount as u128, self.numerator as u128)?,
+            self.denominator as u128,
+        )?)?)
+    }
+}
+
 impl anchor_lang::Id for Launchpad {
     fn id() -> Pubkey {
         crate::ID
@@ -52,9 +68,7 @@ impl Launchpad {
     pub const LEN: usize = 8 + std::mem::size_of::<Launchpad>();
 
     pub fn validate(&self) -> bool {
-        self.fees.new_auction.numerator < self.fees.new_auction.denominator
-            && self.fees.auction_update.numerator < self.fees.auction_update.denominator
-            && self.fees.invalid_bid.numerator < self.fees.invalid_bid.denominator
+        self.fees.invalid_bid.numerator < self.fees.invalid_bid.denominator
             && self.fees.trade.numerator < self.fees.trade.denominator
     }
 

@@ -11,7 +11,7 @@ pub mod seller_balance;
 use {
     crate::{error::LaunchpadError, math, state::bid::Bid},
     anchor_lang::{prelude::*, Discriminator},
-    anchor_spl::token::TokenAccount,
+    anchor_spl::token::{Mint, TokenAccount},
 };
 
 pub fn is_empty_account(account_info: &AccountInfo) -> Result<bool> {
@@ -100,8 +100,24 @@ pub fn initialize_token_account<'info>(
         authority,
         rent,
     };
-    let cpi_context = anchor_lang::context::CpiContext::new(system_program, cpi_accounts);
+    let cpi_context = anchor_lang::context::CpiContext::new(token_program, cpi_accounts);
     anchor_spl::token::initialize_account(cpi_context.with_signer(seeds))
+}
+
+pub fn close_token_account<'info>(
+    receiver: AccountInfo<'info>,
+    token_account: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let cpi_accounts = anchor_spl::token::CloseAccount {
+        account: token_account,
+        destination: receiver,
+        authority,
+    };
+    let cpi_context = anchor_lang::context::CpiContext::new(token_program, cpi_accounts);
+    anchor_spl::token::close_account(cpi_context.with_signer(seeds))
 }
 
 pub fn load_accounts<'a, T: AccountSerialize + AccountDeserialize + Owner + Clone>(
@@ -136,31 +152,47 @@ pub fn save_accounts<T: AccountSerialize + AccountDeserialize + Owner + Clone>(
 pub fn create_bid_accounts<'a>(
     accounts: &[AccountInfo<'a>],
     owners: &[Pubkey],
-    bumps: &[u8],
     payer: AccountInfo<'a>,
     auction: &Pubkey,
     system_program: AccountInfo<'a>,
 ) -> Result<Vec<Account<'a, Bid>>> {
     let mut res: Vec<Account<Bid>> = Vec::with_capacity(accounts.len());
 
-    for ((bid_account, owner), bump) in accounts.iter().zip(owners).zip(bumps) {
+    for (bid_account, owner) in accounts.iter().zip(owners) {
+        // validate bid address
+        let (expected_bid_key, bump) =
+            Pubkey::find_program_address(&[b"bid", owner.as_ref(), auction.as_ref()], &crate::ID);
+        require_keys_eq!(
+            bid_account.key(),
+            expected_bid_key,
+            LaunchpadError::InvalidBidAddress
+        );
+        // initialize the account or check the owner
+        let mut initialized = false;
         if bid_account.data_is_empty() {
             initialize_account(
                 payer.clone(),
                 bid_account.clone(),
                 system_program.clone(),
                 &crate::ID,
-                &[&[b"bid", owner.key().as_ref(), auction.as_ref(), &[*bump]]],
+                &[&[b"bid", owner.key().as_ref(), auction.as_ref(), &[bump]]],
                 Bid::LEN,
             )?;
             let mut bid_data = bid_account.try_borrow_mut_data()?;
             bid_data[..8].copy_from_slice(Bid::discriminator().as_slice());
-        } else {
-            if bid_account.owner != &crate::ID {
-                return Err(ProgramError::IllegalOwner.into());
-            }
+            initialized = true;
+        } else if bid_account.owner != &crate::ID {
+            return Err(ProgramError::IllegalOwner.into());
         }
-        res.push(Account::<Bid>::try_from(bid_account)?);
+
+        let mut bid = Account::<Bid>::try_from(bid_account)?;
+        if initialized {
+            bid.owner = *owner;
+            bid.auction = *auction;
+            bid.seller_initialized = true;
+            bid.bump = bump;
+        }
+        res.push(bid);
     }
 
     Ok(res)
@@ -169,7 +201,6 @@ pub fn create_bid_accounts<'a>(
 pub fn create_token_accounts<'a>(
     accounts: &[AccountInfo<'a>],
     mints: &[AccountInfo<'a>],
-    bumps: &[u8],
     authority: AccountInfo<'a>,
     payer: AccountInfo<'a>,
     auction: &Pubkey,
@@ -178,8 +209,26 @@ pub fn create_token_accounts<'a>(
     rent: AccountInfo<'a>,
 ) -> Result<Vec<Account<'a, TokenAccount>>> {
     let mut res: Vec<Account<TokenAccount>> = Vec::with_capacity(accounts.len());
+    let mut decimals = 0;
 
-    for ((token_account, mint), bump) in accounts.iter().zip(mints).zip(bumps) {
+    for (token_account, mint) in accounts.iter().zip(mints) {
+        // validate token account address
+        let (expected_token_account_key, bump) = Pubkey::find_program_address(
+            &[b"dispense", mint.key().as_ref(), auction.as_ref()],
+            &crate::ID,
+        );
+        require_keys_eq!(
+            token_account.key(),
+            expected_token_account_key,
+            LaunchpadError::InvalidDispenserAddress
+        );
+        let mint_data = Account::<Mint>::try_from(mint)?;
+        if res.is_empty() {
+            decimals = mint_data.decimals;
+        } else if decimals != mint_data.decimals {
+            return err!(LaunchpadError::InvalidDispenserDecimals);
+        }
+        // initialize the account or check the owner
         if token_account.data_is_empty() {
             initialize_token_account(
                 payer.clone(),
@@ -189,11 +238,65 @@ pub fn create_token_accounts<'a>(
                 token_program.clone(),
                 rent.clone(),
                 authority.clone(),
-                &[&[b"dispense", mint.key().as_ref(), auction.as_ref(), &[*bump]]],
+                &[&[b"dispense", mint.key().as_ref(), auction.as_ref(), &[bump]]],
             )?;
+        } else if token_account.owner != &anchor_spl::token::ID {
+            return Err(ProgramError::IllegalOwner.into());
         }
         res.push(Account::<TokenAccount>::try_from(token_account)?);
     }
 
     Ok(res)
+}
+
+pub fn transfer_sol_from_owned<'a>(
+    program_owned_source_account: AccountInfo<'a>,
+    destination_account: AccountInfo<'a>,
+    amount: u64,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+
+    **destination_account.try_borrow_mut_lamports()? = destination_account
+        .try_lamports()?
+        .checked_add(amount)
+        .ok_or(ProgramError::InsufficientFunds)?;
+    let source_balance = program_owned_source_account.try_lamports()?;
+    if source_balance < amount {
+        msg!(
+            "Error: Not enough funds to withdraw {} lamports from {}",
+            amount,
+            program_owned_source_account.key
+        );
+        return Err(ProgramError::InsufficientFunds.into());
+    }
+    **program_owned_source_account.try_borrow_mut_lamports()? = source_balance
+        .checked_sub(amount)
+        .ok_or(ProgramError::InsufficientFunds)?;
+
+    Ok(())
+}
+
+pub fn transfer_sol<'a>(
+    source_account: AccountInfo<'a>,
+    destination_account: AccountInfo<'a>,
+    system_program: AccountInfo<'a>,
+    amount: u64,
+) -> Result<()> {
+    if source_account.try_lamports()? < amount {
+        msg!(
+            "Error: Not enough funds to withdraw {} lamports from {}",
+            amount,
+            source_account.key
+        );
+        return Err(ProgramError::InsufficientFunds.into());
+    }
+
+    let cpi_accounts = anchor_lang::system_program::Transfer {
+        from: source_account,
+        to: destination_account,
+    };
+    let cpi_context = anchor_lang::context::CpiContext::new(system_program, cpi_accounts);
+    anchor_lang::system_program::transfer(cpi_context, amount)
 }

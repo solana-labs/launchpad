@@ -12,6 +12,19 @@ impl Default for BidType {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Debug)]
+pub enum BadBidType {
+    None,
+    TooEarly,
+    FillLimit,
+}
+
+impl Default for BadBidType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 #[account]
 #[derive(Default, Debug)]
 pub struct Bid {
@@ -25,6 +38,8 @@ pub struct Bid {
     pub bid_type: BidType,
     pub filled: u64,
     pub fill_time: i64,
+    pub fill_price: u64,
+    pub fill_amount: u64,
     pub bump: u8,
 }
 

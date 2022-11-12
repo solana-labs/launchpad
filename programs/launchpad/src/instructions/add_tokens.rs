@@ -1,9 +1,12 @@
 //! AddTokens instruction handler
 
 use {
-    crate::{error::LaunchpadError, state::{auction::Auction, launchpad::Launchpad}},
+    crate::{
+        error::LaunchpadError,
+        state::{auction::Auction, launchpad::Launchpad},
+    },
     anchor_lang::prelude::*,
-    anchor_spl::token::{Token, Mint, TokenAccount}
+    anchor_spl::token::{Mint, Token, TokenAccount},
 };
 
 #[derive(Accounts)]
@@ -12,7 +15,7 @@ pub struct AddTokens<'info> {
     pub owner: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         constraint = funding_account.mint == dispensing_custody.mint,
         has_one = owner
     )]
@@ -58,18 +61,24 @@ pub struct AddTokens<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct AddTokensParams {
-    pub amount: u64
+    pub amount: u64,
 }
 
-pub fn add_tokens(
-    ctx: Context<AddTokens>,
-    params: &AddTokensParams,
-) -> Result<()> {
+pub fn add_tokens(ctx: Context<AddTokens>, params: &AddTokensParams) -> Result<()> {
+    if ctx
+        .accounts
+        .auction
+        .is_started(ctx.accounts.auction.get_time()?, true)
+    {
+        require!(
+            ctx.accounts.launchpad.permissions.allow_auction_refills,
+            LaunchpadError::AuctionRefillsNotAllowed
+        );
+    }
     require!(
-        ctx.accounts.launchpad.permissions.allow_auction_refills,
-        LaunchpadError::AuctionRefillsNotAllowed
+        !ctx.accounts.auction.fixed_amount,
+        LaunchpadError::AuctionWithFixedAmount
     );
-    require!(!ctx.accounts.auction.fixed_amount, LaunchpadError::AuctionWithFixedAmount);
 
     ctx.accounts.launchpad.transfer_tokens(
         ctx.accounts.funding_account.to_account_info(),

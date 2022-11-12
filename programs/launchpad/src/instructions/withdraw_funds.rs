@@ -4,7 +4,9 @@ use {
     crate::{
         error::LaunchpadError,
         math,
-        state::{custody::Custody, launchpad::Launchpad, seller_balance::SellerBalance},
+        state::{
+            auction::Auction, custody::Custody, launchpad::Launchpad, seller_balance::SellerBalance,
+        },
     },
     anchor_lang::prelude::*,
     anchor_spl::token::{Token, TokenAccount},
@@ -29,6 +31,13 @@ pub struct WithdrawFunds<'info> {
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
+        mut,
+        seeds = [b"auction", auction.common.name.as_bytes()],
+        bump = auction.bump
+    )]
+    pub auction: Box<Account<'info, Auction>>,
+
+    #[account(
         seeds = [b"custody", custody.mint.as_ref()],
         bump = custody.bump
     )]
@@ -44,7 +53,7 @@ pub struct WithdrawFunds<'info> {
         mut,
         has_one = owner,
         constraint = seller_balance.custody == custody.key(),
-        seeds = [b"seller_balance", seller_balance.custody.as_ref()],
+        seeds = [b"seller_balance", auction.owner.as_ref(), seller_balance.custody.as_ref()],
         bump = seller_balance.bump
     )]
     pub seller_balance: Box<Account<'info, SellerBalance>>,
@@ -74,8 +83,13 @@ pub fn withdraw_funds(ctx: Context<WithdrawFunds>, params: &WithdrawFundsParams)
     require_gt!(params.amount, 0u64, LaunchpadError::InvalidTokenAmount);
 
     // transfer fees from the custody to the receiver
-    let seller_balance = ctx.accounts.seller_balance.as_mut();
+    msg!(
+        "Withdraw funds: {} / {}",
+        params.amount,
+        ctx.accounts.custody_token_account.amount
+    );
 
+    let seller_balance = ctx.accounts.seller_balance.as_mut();
     if seller_balance.balance < params.amount {
         return Err(ProgramError::InsufficientFunds.into());
     }
@@ -84,7 +98,7 @@ pub fn withdraw_funds(ctx: Context<WithdrawFunds>, params: &WithdrawFundsParams)
     ctx.accounts.launchpad.transfer_tokens(
         ctx.accounts.custody_token_account.to_account_info(),
         ctx.accounts.receiving_account.to_account_info(),
-        ctx.accounts.transfer_authority.clone(),
+        ctx.accounts.transfer_authority.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
         params.amount,
     )?;

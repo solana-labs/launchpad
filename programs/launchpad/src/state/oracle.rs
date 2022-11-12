@@ -41,6 +41,7 @@ impl TestOracle {
     pub const LEN: usize = 8 + std::mem::size_of::<TestOracle>();
 }
 
+#[allow(dead_code)]
 impl OraclePrice {
     pub fn new(price: u64, exponent: i32) -> Self {
         Self { price, exponent }

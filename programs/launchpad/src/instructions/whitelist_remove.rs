@@ -25,28 +25,29 @@ pub struct WhitelistRemove<'info> {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct WhitelistRemoveParams {
-    bumps: Vec<u8>,
-}
+pub struct WhitelistRemoveParams {}
 
 pub fn whitelist_remove<'info>(
     ctx: Context<'_, '_, '_, 'info, WhitelistRemove<'info>>,
-    params: &WhitelistRemoveParams,
+    _params: &WhitelistRemoveParams,
 ) -> Result<()> {
-    if ctx.remaining_accounts.is_empty() || ctx.remaining_accounts.len() != params.bumps.len() {
+    if ctx.remaining_accounts.is_empty() {
         return Err(ProgramError::NotEnoughAccountKeys.into());
     }
 
-    let auction_ended = ctx.accounts.auction.is_ended()?;
+    let auction_ended = ctx
+        .accounts
+        .auction
+        .is_ended(ctx.accounts.auction.get_time()?, true);
     let mut bid_accounts = state::load_accounts::<Bid>(ctx.remaining_accounts, &crate::ID)?;
-    for (bid, bump) in bid_accounts.iter_mut().zip(params.bumps.iter()) {
+    for bid in bid_accounts.iter_mut() {
         // validate bid address
         let expected_bid_key = Pubkey::create_program_address(
             &[
                 b"bid",
                 bid.owner.as_ref(),
                 ctx.accounts.auction.key().as_ref(),
-                &[*bump],
+                &[bid.bump],
             ],
             &crate::ID,
         )

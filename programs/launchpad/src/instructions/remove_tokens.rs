@@ -57,10 +57,15 @@ pub struct RemoveTokensParams {
 }
 
 pub fn remove_tokens(ctx: Context<RemoveTokens>, params: &RemoveTokensParams) -> Result<()> {
-    require!(
-        ctx.accounts.launchpad.permissions.allow_auction_pullouts,
-        LaunchpadError::AuctionPullOutsNotAllowed
-    );
+    let curtime = ctx.accounts.auction.get_time()?;
+    if ctx.accounts.auction.is_started(curtime, true)
+        && !ctx.accounts.auction.is_ended(curtime, true)
+    {
+        require!(
+            ctx.accounts.launchpad.permissions.allow_auction_pullouts,
+            LaunchpadError::AuctionPullOutsNotAllowed
+        );
+    }
 
     require!(
         !ctx.accounts.auction.fixed_amount,
@@ -70,7 +75,7 @@ pub fn remove_tokens(ctx: Context<RemoveTokens>, params: &RemoveTokensParams) ->
     ctx.accounts.launchpad.transfer_tokens(
         ctx.accounts.dispensing_custody.to_account_info(),
         ctx.accounts.receiving_account.to_account_info(),
-        ctx.accounts.transfer_authority.clone(),
+        ctx.accounts.transfer_authority.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
         params.amount,
     )?;

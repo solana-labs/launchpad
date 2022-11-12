@@ -1,14 +1,17 @@
 //! CancelBid instruction handler
 
 use {
-    crate::state::{auction::Auction, bid::Bid},
+    crate::{
+        error::LaunchpadError,
+        state::{auction::Auction, bid::Bid},
+    },
     anchor_lang::{prelude::*, AccountsClose},
 };
 
 #[derive(Accounts)]
 pub struct CancelBid<'info> {
-    #[account()]
-    pub owner: Signer<'info>,
+    #[account(mut)]
+    pub initializer: Signer<'info>,
 
     #[account(
         seeds = [b"auction", auction.common.name.as_bytes()],
@@ -18,7 +21,7 @@ pub struct CancelBid<'info> {
 
     #[account(
         mut,
-        seeds = [b"bid", auction.key().as_ref()],
+        seeds = [b"bid", bid.owner.key().as_ref(), auction.key().as_ref()],
         bump = bid.bump
     )]
     pub bid: Box<Account<'info, Bid>>,
@@ -28,16 +31,19 @@ pub struct CancelBid<'info> {
 pub struct CancelBidParams {}
 
 pub fn cancel_bid(ctx: Context<CancelBid>, _params: &CancelBidParams) -> Result<()> {
-    if ctx.accounts.auction.is_ended()? {
-        let bid = ctx.accounts.bid.as_mut();
-        if ctx.accounts.owner.key() == bid.owner
-            || (bid.seller_initialized && ctx.accounts.auction.owner == bid.owner)
-        {
-            bid.close(ctx.accounts.owner.to_account_info())?;
-        } else {
-            return Err(ProgramError::IllegalOwner.into());
-        }
-    }
+    require!(
+        ctx.accounts
+            .auction
+            .is_ended(ctx.accounts.auction.get_time()?, true),
+        LaunchpadError::AuctionInProgress
+    );
 
-    Ok(())
+    let bid = ctx.accounts.bid.as_mut();
+    if (!bid.seller_initialized && ctx.accounts.initializer.key() == bid.owner)
+        || (bid.seller_initialized && ctx.accounts.initializer.key() == ctx.accounts.auction.owner)
+    {
+        bid.close(ctx.accounts.initializer.to_account_info())
+    } else {
+        Err(ProgramError::IllegalOwner.into())
+    }
 }

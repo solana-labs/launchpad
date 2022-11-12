@@ -33,8 +33,8 @@ pub struct SetFees<'info> {
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct SetFeesParams {
-    pub new_auction: Fee,
-    pub auction_update: Fee,
+    pub new_auction: u64,
+    pub auction_update: u64,
     pub invalid_bid: Fee,
     pub trade: Fee,
 }

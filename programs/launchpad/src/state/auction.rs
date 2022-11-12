@@ -31,6 +31,8 @@ pub struct CommonParams {
     pub presale_end_time: i64,
     pub fill_limit_reg_address: u64,
     pub fill_limit_wl_address: u64,
+    pub order_limit_reg_address: u64,
+    pub order_limit_wl_address: u64,
 }
 
 #[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
@@ -55,6 +57,7 @@ impl Default for PricingModel {
 #[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Debug)]
 pub enum RepriceFunction {
     Linear,
+    Exponential,
 }
 
 impl Default for RepriceFunction {
@@ -82,10 +85,12 @@ pub struct PricingParams {
     pub max_price: u64,
     pub min_price: u64,
     pub reprice_delay: i64,
+    pub reprice_coef: u64,
     pub reprice_function: RepriceFunction,
     pub amount_function: AmountFunction,
     pub amount_per_level: u64,
     pub tick_size: u64,
+    pub unit_size: u64,
 }
 
 #[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
@@ -126,7 +131,8 @@ pub struct Auction {
 
 impl CommonParams {
     pub fn validate(&self, curtime: i64) -> bool {
-        (self.fill_limit_reg_address > 0 || self.fill_limit_wl_address > 0)
+        self.fill_limit_reg_address >= self.order_limit_reg_address
+            && self.fill_limit_wl_address >= self.order_limit_wl_address
             && ((self.end_time == 0 && self.start_time == 0)
                 || (self.end_time > self.start_time && self.end_time > curtime))
             && ((self.presale_end_time == 0 && self.presale_start_time == 0)
@@ -155,6 +161,7 @@ impl PricingParams {
             && self.reprice_delay >= 0
             && (self.pricing_model == PricingModel::Fixed
                 || (self.amount_per_level > 0 && self.tick_size > 0))
+            && self.unit_size > 0
     }
 }
 
@@ -169,9 +176,28 @@ impl Auction {
             && self.pricing.validate())
     }
 
+    /// checks if auction has started
+    pub fn is_started(&self, curtime: i64, whitelisted: bool) -> bool {
+        let auction_start_time = if whitelisted {
+            if self.common.presale_start_time > 0 {
+                self.common.presale_start_time
+            } else {
+                self.common.start_time
+            }
+        } else {
+            self.common.start_time
+        };
+        auction_start_time > 0 && curtime >= auction_start_time
+    }
+
     /// Checks if the auction is ended
-    pub fn is_ended(&self) -> Result<bool> {
-        Ok(self.get_time()? >= self.common.end_time)
+    pub fn is_ended(&self, curtime: i64, whitelisted: bool) -> bool {
+        let auction_end_time = if whitelisted {
+            std::cmp::max(self.common.presale_end_time, self.common.end_time)
+        } else {
+            self.common.end_time
+        };
+        curtime >= auction_end_time
     }
 
     #[cfg(feature = "test")]
@@ -190,10 +216,39 @@ impl Auction {
     }
 
     pub fn get_auction_amount(&self, price: u64) -> Result<u64> {
-        Ok(0)
+        match self.pricing.pricing_model {
+            PricingModel::Fixed => self.get_auction_amount_fixed(price),
+            PricingModel::DynamicDutchAuction => self.get_auction_amount_dda(price),
+        }
     }
 
     pub fn get_auction_price(&self, amount: u64) -> Result<u64> {
-        Ok(0)
+        match self.pricing.pricing_model {
+            PricingModel::Fixed => self.get_auction_price_fixed(amount),
+            PricingModel::DynamicDutchAuction => self.get_auction_price_dda(amount),
+        }
+    }
+
+    fn get_auction_amount_fixed(&self, price: u64) -> Result<u64> {
+        Ok(u64::MAX)
+    }
+
+    fn get_auction_price_fixed(&self, amount: u64) -> Result<u64> {
+        Ok(self.pricing.start_price)
+    }
+
+    fn get_auction_amount_dda(&self, price: u64) -> Result<u64> {
+        // compute current best offer price
+        //let best_price = self.stats.last_price
+
+        // compute number of price levels
+
+        // compute available amount
+
+        Ok(222000)
+    }
+
+    fn get_auction_price_dda(&self, amount: u64) -> Result<u64> {
+        Ok(self.pricing.start_price)
     }
 }
