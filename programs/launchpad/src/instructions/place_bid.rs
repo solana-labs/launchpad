@@ -212,23 +212,58 @@ pub fn place_bid<'info>(
         LaunchpadError::AuctionEnded
     );
 
+    // validate dispensing and receiving accounts
+    // all accounts needs to be validated, not the only selected to dispense,
+    // so the user can't game the process
+    msg!("Validate dispensing and receiving accounts");
+    for token in 0..auction.num_tokens as usize {
+        if receiving_accounts[token].owner != ctx.accounts.owner.key() {
+            msg!("Invalid owner of the receiving token account");
+            return Err(ProgramError::IllegalOwner.into());
+        }
+        require_keys_eq!(
+            dispensing_custodies[token].key(),
+            auction.tokens[token].account,
+            LaunchpadError::InvalidDispenserAddress
+        );
+        require_keys_eq!(
+            dispensing_custodies[token].mint,
+            receiving_accounts[token].mint,
+            LaunchpadError::InvalidReceivingAddress
+        )
+    }
+
+    // pick a random token to dispense
+    msg!("Select token to dispense");
+    let token_num = if auction.num_tokens == 1 {
+        0
+    } else {
+        let slothashes_data = ctx.accounts.recent_slothashes.data.borrow();
+        if slothashes_data.len() < 20 {
+            return Err(ProgramError::InvalidAccountData.into());
+        }
+        let rand_seed = usize::from_le_bytes(slothashes_data[12..20].try_into().unwrap());
+        rand_seed % dispensing_custodies.len()
+    };
+    let max_amount_to_dispense = math::checked_div(
+        dispensing_custodies[token_num].amount,
+        auction.pricing.unit_size,
+    )?;
+
     // get available amount at the given price
     msg!("Compute available amount");
-    let avail_amount = auction.get_auction_amount(params.price)?;
+    let avail_amount = std::cmp::min(
+        auction.get_auction_amount(params.price)?,
+        max_amount_to_dispense,
+    );
 
     if avail_amount == 0 || (params.bid_type == BidType::Fok && avail_amount < params.amount) {
         return err!(LaunchpadError::InsufficientAmount);
     }
     let fill_amount = std::cmp::min(avail_amount, params.amount);
 
-    // if available amount is greater than required, ask for the better price
-    let fill_price = if avail_amount > params.amount {
-        let price = auction.get_auction_price(params.amount)?;
-        require_gte!(params.price, price, LaunchpadError::PriceCalcError);
-        price
-    } else {
-        params.price
-    };
+    let fill_price = auction.get_auction_price(fill_amount)?;
+    require_gte!(params.price, fill_price, LaunchpadError::PriceCalcError);
 
     // check for malicious bid
     let fill_amount_limit = if bid.whitelisted {
@@ -403,31 +438,6 @@ pub fn place_bid<'info>(
         bidder_stats.max_fill_price = fill_price;
     }
     bidder_stats.num_trades = bidder_stats.num_trades.wrapping_add(1);
-
-    // pick a random token
-    msg!("Select token to dispense");
-    let token_num = if auction.num_tokens == 1 {
-        0
-    } else {
-        let slothashes_data = ctx.accounts.recent_slothashes.data.borrow();
-        if slothashes_data.len() < 20 {
-            return Err(ProgramError::InvalidAccountData.into());
-        }
-        let rand_seed = usize::from_le_bytes(slothashes_data[12..20].try_into().unwrap());
-        rand_seed % dispensing_custodies.len()
-    };
-
-    // validate dispensing and receiving accounts
-    msg!("Validate accounts for token {}", token_num);
-    if receiving_accounts[token_num].owner != ctx.accounts.owner.key() {
-        msg!("Invalid owner of the receiving token account");
-        return Err(ProgramError::IllegalOwner.into());
-    }
-    require_keys_eq!(
-        dispensing_custodies[token_num].key(),
-        auction.tokens[token_num].account,
-        LaunchpadError::InvalidDispenserAddress
-    );
 
     // transfer purchased tokens to the user
     let transfer_amount = math::checked_mul(fill_amount, auction.pricing.unit_size)?;

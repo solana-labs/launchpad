@@ -1,4 +1,4 @@
-use anchor_lang::prelude::*;
+use {crate::math, anchor_lang::prelude::*};
 
 #[derive(Copy, Clone, PartialEq, AnchorSerialize, AnchorDeserialize, Default, Debug)]
 pub struct BidderStats {
@@ -85,7 +85,7 @@ pub struct PricingParams {
     pub max_price: u64,
     pub min_price: u64,
     pub reprice_delay: i64,
-    pub reprice_coef: u64,
+    pub reprice_coef: f64,
     pub reprice_function: RepriceFunction,
     pub amount_function: AmountFunction,
     pub amount_per_level: u64,
@@ -178,26 +178,13 @@ impl Auction {
 
     /// checks if auction has started
     pub fn is_started(&self, curtime: i64, whitelisted: bool) -> bool {
-        let auction_start_time = if whitelisted {
-            if self.common.presale_start_time > 0 {
-                self.common.presale_start_time
-            } else {
-                self.common.start_time
-            }
-        } else {
-            self.common.start_time
-        };
+        let auction_start_time = self.get_start_time(whitelisted);
         auction_start_time > 0 && curtime >= auction_start_time
     }
 
     /// Checks if the auction is ended
     pub fn is_ended(&self, curtime: i64, whitelisted: bool) -> bool {
-        let auction_end_time = if whitelisted {
-            std::cmp::max(self.common.presale_end_time, self.common.end_time)
-        } else {
-            self.common.end_time
-        };
-        curtime >= auction_end_time
+        curtime >= self.get_end_time(whitelisted)
     }
 
     #[cfg(feature = "test")]
@@ -212,6 +199,26 @@ impl Auction {
             Ok(time)
         } else {
             Err(ProgramError::InvalidAccountData.into())
+        }
+    }
+
+    pub fn get_start_time(&self, whitelisted: bool) -> i64 {
+        if whitelisted {
+            if self.common.presale_start_time > 0 {
+                self.common.presale_start_time
+            } else {
+                self.common.start_time
+            }
+        } else {
+            self.common.start_time
+        }
+    }
+
+    pub fn get_end_time(&self, whitelisted: bool) -> i64 {
+        if whitelisted {
+            std::cmp::max(self.common.presale_end_time, self.common.end_time)
+        } else {
+            self.common.end_time
         }
     }
 
@@ -239,16 +246,97 @@ impl Auction {
 
     fn get_auction_amount_dda(&self, price: u64) -> Result<u64> {
         // compute current best offer price
-        //let best_price = self.stats.last_price
+        let best_offer_price = self.get_best_offer_price(self.get_time()?)?;
+
+        // return early if user's price is not aggressive enough
+        if price < best_offer_price {
+            return Ok(0);
+        }
 
         // compute number of price levels
+        let price_levels = math::checked_add(
+            math::checked_div(
+                math::checked_sub(price, best_offer_price)?,
+                self.pricing.tick_size,
+            )?,
+            1,
+        )?;
 
         // compute available amount
-
-        Ok(222000)
+        self.get_offer_size(price_levels)
     }
 
     fn get_auction_price_dda(&self, amount: u64) -> Result<u64> {
-        Ok(self.pricing.start_price)
+        // compute current best offer price
+        let best_offer_price = self.get_best_offer_price(self.get_time()?)?;
+
+        // get number of price levels required to take
+        let mut price_levels = math::checked_div(amount, self.pricing.amount_per_level)?;
+        if amount % self.pricing.amount_per_level != 0 {
+            price_levels = math::checked_add(price_levels, 1)?;
+        }
+
+        // compute the auction price
+        let price = math::checked_add(
+            best_offer_price,
+            math::checked_mul(price_levels, self.pricing.tick_size)?,
+        )?;
+
+        Ok(std::cmp::min(price, self.pricing.max_price))
+    }
+
+    fn get_best_offer_price(&self, curtime: i64) -> Result<u64> {
+        let (last_price, mut last_trade_time) = if self.stats.last_trade_time > 0 {
+            (self.stats.last_price, self.stats.last_trade_time)
+        } else {
+            (self.pricing.start_price, self.get_start_time(true))
+        };
+        last_trade_time = math::checked_add(last_trade_time, self.pricing.reprice_delay)?;
+        if curtime <= last_trade_time {
+            return Ok(last_price);
+        }
+        let step = math::checked_float_div(
+            math::checked_sub(curtime, last_trade_time)? as f64,
+            math::checked_mul(
+                math::checked_sub(self.get_end_time(true), last_trade_time)?,
+                100,
+            )? as f64,
+        )?;
+        let mut best_offer_price = math::checked_as_u64(math::checked_div(
+            math::checked_mul(
+                last_price as u128,
+                math::checked_as_u128(math::checked_float_mul(
+                    f64::exp(-self.pricing.reprice_coef * step),
+                    10000.0,
+                )?)?,
+            )?,
+            10000u128,
+        )?)?;
+
+        // round to tick size
+        if best_offer_price % self.pricing.tick_size != 0 {
+            best_offer_price = math::checked_add(
+                math::checked_mul(
+                    math::checked_div(best_offer_price, self.pricing.tick_size)?,
+                    self.pricing.tick_size,
+                )?,
+                self.pricing.tick_size,
+            )?;
+        }
+
+        // check for min/max
+        best_offer_price = std::cmp::min(best_offer_price, self.pricing.max_price);
+        best_offer_price = std::cmp::max(best_offer_price, self.pricing.min_price);
+
+        match self.pricing.reprice_function {
+            RepriceFunction::Exponential => Ok(best_offer_price),
+            RepriceFunction::Linear => panic!("Unimplemented"),
+        }
+    }
+
+    pub fn get_offer_size(&self, price_levels: u64) -> Result<u64> {
+        match self.pricing.amount_function {
+            AmountFunction::Fixed => math::checked_mul(price_levels, self.pricing.amount_per_level),
+        }
     }
 }

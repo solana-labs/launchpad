@@ -24,6 +24,8 @@ pub enum LaunchpadError {
     TooManyAccountKeys,
     #[msg("Invalid bid account address")]
     InvalidBidAddress,
+    #[msg("Invalid receiving account address")]
+    InvalidReceivingAddress,
     #[msg("Invalid dispensing account address")]
     InvalidDispenserAddress,
     #[msg("Dispensing accounts should have the same decimals")]
