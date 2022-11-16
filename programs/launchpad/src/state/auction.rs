@@ -222,31 +222,31 @@ impl Auction {
         }
     }
 
-    pub fn get_auction_amount(&self, price: u64) -> Result<u64> {
+    pub fn get_auction_amount(&self, price: u64, curtime: i64) -> Result<u64> {
         match self.pricing.pricing_model {
-            PricingModel::Fixed => self.get_auction_amount_fixed(price),
-            PricingModel::DynamicDutchAuction => self.get_auction_amount_dda(price),
+            PricingModel::Fixed => self.get_auction_amount_fixed(),
+            PricingModel::DynamicDutchAuction => self.get_auction_amount_dda(price, curtime),
         }
     }
 
-    pub fn get_auction_price(&self, amount: u64) -> Result<u64> {
+    pub fn get_auction_price(&self, amount: u64, curtime: i64) -> Result<u64> {
         match self.pricing.pricing_model {
-            PricingModel::Fixed => self.get_auction_price_fixed(amount),
-            PricingModel::DynamicDutchAuction => self.get_auction_price_dda(amount),
+            PricingModel::Fixed => self.get_auction_price_fixed(),
+            PricingModel::DynamicDutchAuction => self.get_auction_price_dda(amount, curtime),
         }
     }
 
-    fn get_auction_amount_fixed(&self, price: u64) -> Result<u64> {
+    fn get_auction_amount_fixed(&self) -> Result<u64> {
         Ok(u64::MAX)
     }
 
-    fn get_auction_price_fixed(&self, amount: u64) -> Result<u64> {
+    fn get_auction_price_fixed(&self) -> Result<u64> {
         Ok(self.pricing.start_price)
     }
 
-    fn get_auction_amount_dda(&self, price: u64) -> Result<u64> {
+    fn get_auction_amount_dda(&self, price: u64, curtime: i64) -> Result<u64> {
         // compute current best offer price
-        let best_offer_price = self.get_best_offer_price(self.get_time()?)?;
+        let best_offer_price = self.get_best_offer_price(curtime)?;
 
         // return early if user's price is not aggressive enough
         if price < best_offer_price {
@@ -266,15 +266,19 @@ impl Auction {
         self.get_offer_size(price_levels)
     }
 
-    fn get_auction_price_dda(&self, amount: u64) -> Result<u64> {
+    fn get_auction_price_dda(&self, amount: u64, curtime: i64) -> Result<u64> {
+        if amount == 0 {
+            return Ok(0);
+        }
+
         // compute current best offer price
-        let best_offer_price = self.get_best_offer_price(self.get_time()?)?;
+        let best_offer_price = self.get_best_offer_price(curtime)?;
 
         // get number of price levels required to take
-        let mut price_levels = math::checked_div(amount, self.pricing.amount_per_level)?;
-        if amount % self.pricing.amount_per_level != 0 {
-            price_levels = math::checked_add(price_levels, 1)?;
-        }
+        let price_levels = math::checked_sub(
+            math::checked_ceil_div(amount, self.pricing.amount_per_level)?,
+            1,
+        )?;
 
         // compute the auction price
         let price = math::checked_add(
@@ -289,37 +293,49 @@ impl Auction {
         let (last_price, mut last_trade_time) = if self.stats.last_trade_time > 0 {
             (self.stats.last_price, self.stats.last_trade_time)
         } else {
-            (self.pricing.start_price, self.get_start_time(true))
+            let start_time = if self.common.start_time > 0 && curtime >= self.common.start_time {
+                self.common.start_time
+            } else {
+                self.get_start_time(true)
+            };
+            (self.pricing.start_price, start_time)
         };
         last_trade_time = math::checked_add(last_trade_time, self.pricing.reprice_delay)?;
-        if curtime <= last_trade_time {
+        let end_time = self.get_end_time(true);
+        if curtime <= last_trade_time || curtime >= end_time {
             return Ok(last_price);
         }
         let step = math::checked_float_div(
             math::checked_sub(curtime, last_trade_time)? as f64,
-            math::checked_mul(
-                math::checked_sub(self.get_end_time(true), last_trade_time)?,
-                100,
-            )? as f64,
+            math::checked_sub(end_time, last_trade_time)? as f64,
         )?;
-        let mut best_offer_price = math::checked_as_u64(math::checked_div(
-            math::checked_mul(
-                last_price as u128,
-                math::checked_as_u128(math::checked_float_mul(
-                    f64::exp(-self.pricing.reprice_coef * step),
-                    10000.0,
-                )?)?,
-            )?,
-            10000u128,
-        )?)?;
+
+        let mut best_offer_price = match self.pricing.reprice_function {
+            RepriceFunction::Exponential => math::checked_as_u64(math::checked_div(
+                math::checked_mul(
+                    last_price as u128,
+                    math::checked_as_u128(math::checked_float_mul(
+                        f64::exp(
+                            -self.pricing.reprice_coef * math::checked_float_mul(step, 100f64)?,
+                        ),
+                        10000.0,
+                    )?)?,
+                )?,
+                10000u128,
+            )?)?,
+            RepriceFunction::Linear => math::checked_as_u64(math::checked_div(
+                math::checked_mul(
+                    last_price as u128,
+                    math::checked_as_u128(math::checked_float_mul(1.0 - step, 10000.0)?)?,
+                )?,
+                10000u128,
+            )?)?,
+        };
 
         // round to tick size
         if best_offer_price % self.pricing.tick_size != 0 {
-            best_offer_price = math::checked_add(
-                math::checked_mul(
-                    math::checked_div(best_offer_price, self.pricing.tick_size)?,
-                    self.pricing.tick_size,
-                )?,
+            best_offer_price = math::checked_mul(
+                math::checked_ceil_div(best_offer_price, self.pricing.tick_size)?,
                 self.pricing.tick_size,
             )?;
         }
@@ -328,15 +344,163 @@ impl Auction {
         best_offer_price = std::cmp::min(best_offer_price, self.pricing.max_price);
         best_offer_price = std::cmp::max(best_offer_price, self.pricing.min_price);
 
-        match self.pricing.reprice_function {
-            RepriceFunction::Exponential => Ok(best_offer_price),
-            RepriceFunction::Linear => panic!("Unimplemented"),
-        }
+        Ok(best_offer_price)
     }
 
     pub fn get_offer_size(&self, price_levels: u64) -> Result<u64> {
         match self.pricing.amount_function {
             AmountFunction::Fixed => math::checked_mul(price_levels, self.pricing.amount_per_level),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn get_fixture() -> Auction {
+        let mut auction = Auction {
+            creation_time: 100,
+            ..Default::default()
+        };
+
+        auction.common.name = "test_auction".to_string();
+        auction.common.start_time = 350;
+        auction.common.end_time = 500;
+        auction.common.presale_start_time = 200;
+        auction.common.presale_end_time = 300;
+
+        auction.pricing.pricing_model = PricingModel::DynamicDutchAuction;
+        auction.pricing.start_price = 1000;
+        auction.pricing.max_price = 2000;
+        auction.pricing.min_price = 50;
+        auction.pricing.reprice_delay = 10;
+        auction.pricing.reprice_coef = 0.05;
+        auction.pricing.reprice_function = RepriceFunction::Exponential;
+        auction.pricing.amount_function = AmountFunction::Fixed;
+        auction.pricing.amount_per_level = 20;
+        auction.pricing.tick_size = 10;
+        auction.pricing.unit_size = 100;
+
+        auction.payment.accept_sol = true;
+
+        assert!(auction.validate().unwrap());
+
+        auction
+    }
+
+    #[test]
+    fn get_best_offer_price_exp() {
+        let mut auction = get_fixture();
+
+        auction.pricing.reprice_function = RepriceFunction::Exponential;
+        assert_eq!(1000, auction.get_best_offer_price(100).unwrap());
+        assert_eq!(1000, auction.get_best_offer_price(200).unwrap());
+        assert_eq!(510, auction.get_best_offer_price(250).unwrap());
+        assert_eq!(1000, auction.get_best_offer_price(350).unwrap());
+        assert_eq!(240, auction.get_best_offer_price(400).unwrap());
+        assert_eq!(50, auction.get_best_offer_price(499).unwrap());
+    }
+
+    #[test]
+    fn get_best_offer_price_linear() {
+        let mut auction = get_fixture();
+
+        auction.pricing.reprice_function = RepriceFunction::Linear;
+        assert_eq!(1000, auction.get_best_offer_price(100).unwrap());
+        assert_eq!(1000, auction.get_best_offer_price(200).unwrap());
+        assert_eq!(870, auction.get_best_offer_price(250).unwrap());
+        assert_eq!(1000, auction.get_best_offer_price(350).unwrap());
+        assert_eq!(720, auction.get_best_offer_price(400).unwrap());
+        assert_eq!(50, auction.get_best_offer_price(499).unwrap());
+    }
+
+    #[test]
+    fn get_auction_price_dda() {
+        let mut auction = get_fixture();
+
+        auction.pricing.reprice_function = RepriceFunction::Exponential;
+        assert_eq!(1000, auction.get_auction_price_dda(1, 100).unwrap());
+        assert_eq!(1000, auction.get_auction_price_dda(1, 200).unwrap());
+        assert_eq!(510, auction.get_auction_price_dda(1, 250).unwrap());
+        assert_eq!(1000, auction.get_auction_price_dda(1, 350).unwrap());
+        assert_eq!(240, auction.get_auction_price_dda(1, 400).unwrap());
+        assert_eq!(50, auction.get_auction_price_dda(1, 499).unwrap());
+
+        assert_eq!(1000, auction.get_auction_price_dda(20, 100).unwrap());
+        assert_eq!(1000, auction.get_auction_price_dda(20, 200).unwrap());
+        assert_eq!(510, auction.get_auction_price_dda(20, 250).unwrap());
+        assert_eq!(1000, auction.get_auction_price_dda(20, 350).unwrap());
+        assert_eq!(240, auction.get_auction_price_dda(20, 400).unwrap());
+        assert_eq!(50, auction.get_auction_price_dda(20, 499).unwrap());
+
+        assert_eq!(1010, auction.get_auction_price_dda(21, 100).unwrap());
+        assert_eq!(1010, auction.get_auction_price_dda(21, 200).unwrap());
+        assert_eq!(520, auction.get_auction_price_dda(21, 250).unwrap());
+        assert_eq!(1010, auction.get_auction_price_dda(21, 350).unwrap());
+        assert_eq!(250, auction.get_auction_price_dda(21, 400).unwrap());
+        assert_eq!(60, auction.get_auction_price_dda(21, 499).unwrap());
+
+        assert_eq!(1090, auction.get_auction_price_dda(200, 100).unwrap());
+        assert_eq!(1090, auction.get_auction_price_dda(200, 200).unwrap());
+        assert_eq!(600, auction.get_auction_price_dda(200, 250).unwrap());
+        assert_eq!(1090, auction.get_auction_price_dda(200, 350).unwrap());
+        assert_eq!(330, auction.get_auction_price_dda(200, 400).unwrap());
+        assert_eq!(140, auction.get_auction_price_dda(200, 499).unwrap());
+
+        assert_eq!(2000, auction.get_auction_price_dda(u64::MAX, 100).unwrap());
+        assert_eq!(2000, auction.get_auction_price_dda(u64::MAX, 200).unwrap());
+        assert_eq!(2000, auction.get_auction_price_dda(u64::MAX, 250).unwrap());
+        assert_eq!(2000, auction.get_auction_price_dda(u64::MAX, 350).unwrap());
+        assert_eq!(2000, auction.get_auction_price_dda(u64::MAX, 400).unwrap());
+        assert_eq!(2000, auction.get_auction_price_dda(u64::MAX, 499).unwrap());
+    }
+
+    #[test]
+    fn get_auction_amount_dda() {
+        let mut auction = get_fixture();
+
+        auction.pricing.reprice_function = RepriceFunction::Exponential;
+        assert_eq!(0, auction.get_auction_amount_dda(0, 100).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(0, 200).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(0, 250).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(0, 350).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(0, 400).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(0, 499).unwrap());
+
+        assert_eq!(0, auction.get_auction_amount_dda(999, 100).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(999, 200).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(509, 250).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(999, 350).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(239, 400).unwrap());
+        assert_eq!(0, auction.get_auction_amount_dda(49, 499).unwrap());
+
+        assert_eq!(20, auction.get_auction_amount_dda(1000, 100).unwrap());
+        assert_eq!(20, auction.get_auction_amount_dda(1000, 200).unwrap());
+        assert_eq!(20, auction.get_auction_amount_dda(510, 250).unwrap());
+        assert_eq!(20, auction.get_auction_amount_dda(1000, 350).unwrap());
+        assert_eq!(20, auction.get_auction_amount_dda(240, 400).unwrap());
+        assert_eq!(20, auction.get_auction_amount_dda(50, 499).unwrap());
+
+        assert_eq!(40, auction.get_auction_amount_dda(1010, 100).unwrap());
+        assert_eq!(40, auction.get_auction_amount_dda(1010, 200).unwrap());
+        assert_eq!(40, auction.get_auction_amount_dda(520, 250).unwrap());
+        assert_eq!(40, auction.get_auction_amount_dda(1010, 350).unwrap());
+        assert_eq!(40, auction.get_auction_amount_dda(250, 400).unwrap());
+        assert_eq!(40, auction.get_auction_amount_dda(60, 499).unwrap());
+
+        assert_eq!(2020, auction.get_auction_amount_dda(2000, 100).unwrap());
+        assert_eq!(2020, auction.get_auction_amount_dda(2000, 200).unwrap());
+        assert_eq!(3000, auction.get_auction_amount_dda(2000, 250).unwrap());
+        assert_eq!(2020, auction.get_auction_amount_dda(2000, 350).unwrap());
+        assert_eq!(3540, auction.get_auction_amount_dda(2000, 400).unwrap());
+        assert_eq!(3920, auction.get_auction_amount_dda(2000, 499).unwrap());
+
+        assert_eq!(
+            u64::MAX - 15,
+            auction
+                .get_auction_amount_dda(u64::MAX / 2 + 990, 100)
+                .unwrap()
+        );
     }
 }

@@ -44,17 +44,17 @@ pub struct Launchpad {
 
 impl Fee {
     pub fn is_zero(&self) -> bool {
-        return self.numerator == 0;
+        self.numerator == 0
     }
 
     pub fn get_fee_amount(&self, amount: u64) -> Result<u64> {
         if self.is_zero() {
             return Ok(0);
         }
-        Ok(math::checked_as_u64(math::checked_ceil_div(
+        math::checked_as_u64(math::checked_ceil_div(
             math::checked_mul(amount as u128, self.numerator as u128)?,
             self.denominator as u128,
-        )?)?)
+        )?)
     }
 }
 

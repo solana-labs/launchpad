@@ -11,12 +11,11 @@ pub struct SetAdminSigners<'info> {
     pub admin: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         seeds = [b"multisig"], 
         bump = multisig.load()?.bump
     )]
     pub multisig: AccountLoader<'info, Multisig>,
-
     // remaining accounts: 1 to Multisig::MAX_SIGNERS admin signers (read-only, unsigned)
 }
 

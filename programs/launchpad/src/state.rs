@@ -75,6 +75,7 @@ pub fn initialize_account<'info>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn initialize_token_account<'info>(
     payer: AccountInfo<'info>,
     token_account: AccountInfo<'info>,
@@ -198,6 +199,7 @@ pub fn create_bid_accounts<'a>(
     Ok(res)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_token_accounts<'a>(
     accounts: &[AccountInfo<'a>],
     mints: &[AccountInfo<'a>],

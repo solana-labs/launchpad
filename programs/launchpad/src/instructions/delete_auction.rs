@@ -93,14 +93,14 @@ pub fn delete_auction<'info>(
             &ctx.remaining_accounts[..auction.num_tokens.into()],
             &Token::id(),
         )?;
-        for i in 0..dispensers.len() {
+        for (i, dispenser) in dispensers.iter().enumerate() {
             require_keys_eq!(
-                dispensers[i].key(),
+                dispenser.key(),
                 auction.tokens[i].account,
                 LaunchpadError::InvalidDispenserAddress
             );
-            if dispensers[i].amount > 0 {
-                msg!("Non-empty dispensing account: {}", dispensers[i].key());
+            if dispenser.amount > 0 {
+                msg!("Non-empty dispensing account: {}", dispenser.key());
                 return err!(LaunchpadError::AuctionNotEmpty);
             }
             state::close_token_account(

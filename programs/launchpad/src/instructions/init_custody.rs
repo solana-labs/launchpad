@@ -4,9 +4,9 @@ use {
     crate::{
         error::LaunchpadError,
         state::{
-            oracle::OracleType,
             custody::Custody,
             multisig::{AdminInstruction, Multisig},
+            oracle::OracleType,
         },
     },
     anchor_lang::prelude::*,
@@ -22,7 +22,7 @@ pub struct InitCustody<'info> {
     pub admin: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         seeds = [b"multisig"], 
         bump = multisig.load()?.bump
     )]

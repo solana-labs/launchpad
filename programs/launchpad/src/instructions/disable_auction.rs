@@ -1,9 +1,6 @@
 //! DisableAuction instruction handler
 
-use {
-    crate::state::auction::Auction,
-    anchor_lang::prelude::*,
-};
+use {crate::state::auction::Auction, anchor_lang::prelude::*};
 
 #[derive(Accounts)]
 pub struct DisableAuction<'info> {
@@ -11,7 +8,7 @@ pub struct DisableAuction<'info> {
     pub owner: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         has_one = owner,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
@@ -20,13 +17,9 @@ pub struct DisableAuction<'info> {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct DisableAuctionParams {
-}
+pub struct DisableAuctionParams {}
 
-pub fn disable_auction(
-    ctx: Context<DisableAuction>,
-    _params: &DisableAuctionParams,
-) -> Result<()> {
+pub fn disable_auction(ctx: Context<DisableAuction>, _params: &DisableAuctionParams) -> Result<()> {
     let auction = ctx.accounts.auction.as_mut();
     auction.enabled = false;
 

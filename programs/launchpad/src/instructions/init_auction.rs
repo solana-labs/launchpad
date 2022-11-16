@@ -136,9 +136,9 @@ pub fn init_auction<'info>(
     auction.tokens = [AuctionToken::default(); Auction::MAX_TOKENS];
     auction.num_tokens = dispensers.len() as u8;
 
-    for n in 0..(auction.num_tokens as usize) {
+    for (n, dispenser) in dispensers.iter().enumerate() {
         auction.tokens[n].ratio = params.token_ratios[n];
-        auction.tokens[n].account = dispensers[n].key();
+        auction.tokens[n].account = dispenser.key();
     }
 
     auction.bump = *ctx.bumps.get("auction").ok_or(ProgramError::InvalidSeeds)?;

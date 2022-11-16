@@ -101,7 +101,7 @@ impl Multisig {
         let mut signers: [Pubkey; Multisig::MAX_SIGNERS] = Default::default();
         let mut signed: [bool; Multisig::MAX_SIGNERS] = Default::default();
 
-        for idx in 0..admin_signers.len() as usize {
+        for idx in 0..admin_signers.len() {
             if signers.contains(admin_signers[idx].key) {
                 msg!("Error: Duplicate signer {}", admin_signers[idx].key);
                 return Err(ProgramError::InvalidArgument.into());

@@ -32,5 +32,7 @@ pub fn get_auction_amount(
     ctx: Context<GetAuctionAmount>,
     params: &GetAuctionAmountParams,
 ) -> Result<u64> {
-    Ok(ctx.accounts.auction.get_auction_amount(params.price)?)
+    ctx.accounts
+        .auction
+        .get_auction_amount(params.price, ctx.accounts.auction.get_time()?)
 }

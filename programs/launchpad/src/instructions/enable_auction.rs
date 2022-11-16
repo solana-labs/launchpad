@@ -1,9 +1,6 @@
 //! EnableAuction instruction handler
 
-use {
-    crate::state::auction::Auction,
-    anchor_lang::prelude::*,
-};
+use {crate::state::auction::Auction, anchor_lang::prelude::*};
 
 #[derive(Accounts)]
 pub struct EnableAuction<'info> {
@@ -11,7 +8,7 @@ pub struct EnableAuction<'info> {
     pub owner: Signer<'info>,
 
     #[account(
-        mut, 
+        mut,
         has_one = owner,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
@@ -20,15 +17,11 @@ pub struct EnableAuction<'info> {
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct EnableAuctionParams {
-}
+pub struct EnableAuctionParams {}
 
-pub fn enable_auction(
-    ctx: Context<EnableAuction>,
-    _params: &EnableAuctionParams,
-) -> Result<()> {
-     let auction = ctx.accounts.auction.as_mut();
-     auction.enabled = true;
+pub fn enable_auction(ctx: Context<EnableAuction>, _params: &EnableAuctionParams) -> Result<()> {
+    let auction = ctx.accounts.auction.as_mut();
+    auction.enabled = true;
 
     Ok(())
 }

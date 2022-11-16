@@ -503,7 +503,7 @@ describe("launchpad", () => {
       bidType: bidType,
       filled: new BN(bidAmount),
       fillTime: auction.creationTime,
-      fillPrice: new BN(102),
+      fillPrice: new BN(100),
       fillAmount: new BN(bidAmount),
       bump: bid.bump,
     };

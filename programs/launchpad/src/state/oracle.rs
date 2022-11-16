@@ -187,7 +187,7 @@ impl OraclePrice {
 
         Ok(OraclePrice {
             // price is i64 and > 0 per check above
-            price: oracle_acc.price as u64,
+            price: oracle_acc.price,
             exponent: oracle_acc.expo,
         })
     }

@@ -253,7 +253,7 @@ pub fn place_bid<'info>(
     // get available amount at the given price
     msg!("Compute available amount");
     let avail_amount = std::cmp::min(
-        auction.get_auction_amount(params.price)?,
+        auction.get_auction_amount(params.price, curtime)?,
         max_amount_to_dispense,
     );
 
@@ -262,7 +262,7 @@ pub fn place_bid<'info>(
     }
     let fill_amount = std::cmp::min(avail_amount, params.amount);
 
-    let fill_price = auction.get_auction_price(fill_amount)?;
+    let fill_price = auction.get_auction_price(fill_amount, curtime)?;
     require_gte!(params.price, fill_price, LaunchpadError::PriceCalcError);
 
     // check for malicious bid
@@ -428,7 +428,7 @@ pub fn place_bid<'info>(
     };
     bidder_stats.fills_volume = math::checked_add(bidder_stats.fills_volume, fill_amount)?;
     bidder_stats.weighted_fills_sum = math::checked_add(
-        bidder_stats.weighted_fills_sum as u128,
+        bidder_stats.weighted_fills_sum,
         math::checked_mul(fill_amount as u128, fill_price as u128)?,
     )?;
     if fill_price < bidder_stats.min_fill_price {
@@ -453,6 +453,7 @@ pub fn place_bid<'info>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_bad_bid_fee<'info>(
     launchpad: &mut Account<'info, Launchpad>,
     custody: &mut Account<'info, Custody>,
@@ -475,7 +476,7 @@ fn collect_bad_bid_fee<'info>(
         Transfer {
             from: funding_account,
             to: destination_account,
-            authority: authority,
+            authority,
         },
     );
     anchor_spl::token::transfer(context, fee_amount)?;

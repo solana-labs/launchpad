@@ -24,7 +24,7 @@ pub struct SetTestTime<'info> {
     pub multisig: AccountLoader<'info, Multisig>,
 
     #[account(
-        mut, 
+        mut,
         seeds = [b"auction", auction.common.name.as_bytes()],
         bump = auction.bump
     )]
