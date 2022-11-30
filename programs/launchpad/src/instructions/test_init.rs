@@ -39,7 +39,8 @@ pub struct TestInit<'info> {
     #[account(
         init,
         payer = upgrade_authority,
-        space = Launchpad::LEN, seeds = [b"launchpad"],
+        space = Launchpad::LEN,
+        seeds = [b"launchpad"],
         bump
     )]
     pub launchpad: Box<Account<'info, Launchpad>>,

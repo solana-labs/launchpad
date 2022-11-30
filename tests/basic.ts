@@ -546,7 +546,9 @@ describe("launchpad", () => {
     expect(withdrawAmountTokens).to.greaterThan(0);
 
     let initialBalanceSol = await lpd.getSolBalance(lpd.admins[0].publicKey);
-    let withdrawAmountSol = await lpd.getSolBalance(lpd.authority.publicKey);
+    let withdrawAmountSol = await lpd.getExtraSolBalance(
+      lpd.authority.publicKey
+    );
     expect(withdrawAmountSol).to.greaterThan(0);
 
     await lpd.withdrawFees(

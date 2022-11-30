@@ -120,7 +120,7 @@ pub struct Auction {
     pub payment: PaymentParams,
     pub pricing: PricingParams,
     pub stats: AuctionStats,
-    pub tokens: [AuctionToken; 4], // Auction::MAX_TOKENS
+    pub tokens: [AuctionToken; 10], // Auction::MAX_TOKENS
     pub num_tokens: u8,
 
     // time of creation, also used as current wall clock time for testing
@@ -167,7 +167,7 @@ impl PricingParams {
 
 impl Auction {
     pub const LEN: usize = 8 + std::mem::size_of::<Auction>();
-    pub const MAX_TOKENS: usize = 4;
+    pub const MAX_TOKENS: usize = 10;
 
     pub fn validate(&self) -> Result<bool> {
         Ok(self.common.name.len() >= 6

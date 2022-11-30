@@ -13,6 +13,7 @@ use {
     },
     anchor_lang::prelude::*,
     anchor_spl::token::{Token, TokenAccount},
+    solana_program::sysvar,
 };
 
 #[derive(Accounts)]
@@ -126,11 +127,22 @@ pub fn withdraw_fees<'info>(
 
     // transfer sol fees from the custody to the receiver
     if params.sol_amount > 0 {
+        let balance = ctx.accounts.transfer_authority.try_lamports()?;
+        let min_balance = sysvar::rent::Rent::get().unwrap().minimum_balance(0);
+        let available_balance = if balance > min_balance {
+            math::checked_sub(balance, min_balance)?
+        } else {
+            0
+        };
         msg!(
             "Withdraw SOL fees: {} / {}",
             params.sol_amount,
-            ctx.accounts.transfer_authority.try_lamports()?
+            available_balance
         );
+        if available_balance < params.sol_amount {
+            return Err(ProgramError::InsufficientFunds.into());
+        }
+
         state::transfer_sol_from_owned(
             ctx.accounts.transfer_authority.to_account_info(),
             ctx.accounts.receiving_sol_account.to_account_info(),

@@ -255,7 +255,7 @@ export class LaunchpadTester {
   };
 
   requestAirdrop = async (pubkey: PublicKey) => {
-    if ((await this.getBalance(pubkey)) < 1e9 / 2) {
+    if ((await this.getSolBalance(pubkey)) < 1e9 / 2) {
       return this.provider.connection.requestAirdrop(pubkey, 1e9);
     }
   };
@@ -349,6 +349,20 @@ export class LaunchpadTester {
       .getBalance(pubkey)
       .then((balance) => balance)
       .catch(() => 0);
+  };
+
+  getExtraSolBalance = async (pubkey: PublicKey) => {
+    let balance = await this.provider.connection
+      .getBalance(pubkey)
+      .then((balance) => balance)
+      .catch(() => 0);
+    let accountInfo = await this.provider.connection.getAccountInfo(pubkey);
+    let dataSize = accountInfo ? accountInfo.data.length : 0;
+    let minBalance =
+      await this.provider.connection.getMinimumBalanceForRentExemption(
+        dataSize
+      );
+    return balance > minBalance ? balance - minBalance : 0;
   };
 
   getTokenAccount = async (pubkey: PublicKey) => {
