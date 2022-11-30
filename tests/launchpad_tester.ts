@@ -9,6 +9,9 @@ import {
   SYSVAR_RENT_PUBKEY,
   SYSVAR_SLOT_HASHES_PUBKEY,
   SYSVAR_INSTRUCTIONS_PUBKEY,
+  AddressLookupTableProgram,
+  TransactionMessage,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import * as spl from "@solana/spl-token";
 import { BN } from "bn.js";
@@ -30,6 +33,7 @@ export class LaunchpadTester {
   authority: { publicKey: PublicKey; bump: number };
   launchpad: { publicKey: PublicKey; bump: number };
   auction: { publicKey: PublicKey; bump: number };
+  lookupTable: { publicKey: PublicKey; bump: number };
 
   pricingCustody: {
     mint: Keypair;
@@ -97,6 +101,15 @@ export class LaunchpadTester {
     this.authority = await this.findProgramAddress("transfer_authority");
     this.launchpad = await this.findProgramAddress("launchpad");
     this.auction = await this.findProgramAddress("auction", "test auction");
+    let slot = await this.provider.connection.getSlot();
+    this.lookupTable = {
+      publicKey: AddressLookupTableProgram.createLookupTable({
+        authority: this.authority.publicKey,
+        payer: this.provider.wallet.publicKey,
+        recentSlot: slot,
+      })[1],
+      bump: slot,
+    };
 
     // custodies
     this.pricingCustody = await this.generateCustody(9);
@@ -424,13 +437,19 @@ export class LaunchpadTester {
           auctionUpdateFee: new BN(100),
           invalidBidFee: { numerator: new BN(1), denominator: new BN(100) },
           tradeFee: { numerator: new BN(1), denominator: new BN(100) },
+          recentSlot: new BN(this.lookupTable.bump),
         })
         .accounts({
           upgradeAuthority: this.provider.wallet.publicKey,
           multisig: this.multisig.publicKey,
           transferAuthority: this.authority.publicKey,
           launchpad: this.launchpad.publicKey,
+          lookupTable: this.lookupTable.publicKey,
+          recentSlothashes: SYSVAR_SLOT_HASHES_PUBKEY,
+          instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+          lookupTableProgram: AddressLookupTableProgram.programId,
           systemProgram: SystemProgram.programId,
+          tokenProgram: spl.TOKEN_PROGRAM_ID,
         })
         .remainingAccounts(this.adminMetas)
         .rpc();
@@ -965,7 +984,12 @@ export class LaunchpadTester {
     }
   };
 
-  placeBid = async (price: number, amount: number, bidType, user) => {
+  placeBidNoLookupTable = async (
+    price: number,
+    amount: number,
+    bidType,
+    user
+  ) => {
     try {
       await this.program.methods
         .placeBid({
@@ -997,6 +1021,70 @@ export class LaunchpadTester {
         ])
         .signers([user.wallet])
         .rpc();
+    } catch (err) {
+      if (this.printErrors) {
+        console.log(err);
+      }
+      throw err;
+    }
+  };
+
+  placeBid = async (price: number, amount: number, bidType, user) => {
+    try {
+      let ix = await this.program.methods
+        .placeBid({
+          price: this.toTokenAmount(price, this.pricingCustody.decimals),
+          amount: new BN(amount),
+          bidType: bidType,
+        })
+        .accounts({
+          owner: user.wallet.publicKey,
+          fundingAccount: user.paymentAccount,
+          transferAuthority: this.authority.publicKey,
+          launchpad: this.launchpad.publicKey,
+          auction: this.auction.publicKey,
+          sellerBalance: this.seller.balanceAccount,
+          bid: await this.getBidAddress(user.wallet.publicKey),
+          pricingCustody: this.pricingCustody.custody,
+          pricingOracleAccount: this.pricingCustody.oracleAccount,
+          paymentCustody: this.paymentCustody.custody,
+          paymentOracleAccount: this.paymentCustody.oracleAccount,
+          paymentTokenAccount: this.paymentCustody.tokenAccount,
+          recentSlothashes: SYSVAR_SLOT_HASHES_PUBKEY,
+          instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: spl.TOKEN_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          ...user.receivingAccountMetas,
+          ...this.dispensingAccountMetas,
+        ])
+        .signers([user.wallet])
+        .instruction();
+
+      const lookupTableAccount = await this.provider.connection
+        .getAddressLookupTable(this.lookupTable.publicKey)
+        .then((res) => res.value);
+
+      const latestBlockhash =
+        await this.provider.connection.getLatestBlockhash();
+
+      const messageV0 = new TransactionMessage({
+        payerKey: user.wallet.publicKey,
+        recentBlockhash: latestBlockhash.blockhash,
+        instructions: [ix],
+      }).compileToV0Message([lookupTableAccount]);
+
+      const transactionV0 = new VersionedTransaction(messageV0);
+      transactionV0.sign([user.wallet]);
+
+      await this.provider.connection.confirmTransaction({
+        signature: await this.provider.connection.sendTransaction(
+          transactionV0
+        ),
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      });
     } catch (err) {
       if (this.printErrors) {
         console.log(err);

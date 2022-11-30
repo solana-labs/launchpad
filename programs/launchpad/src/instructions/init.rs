@@ -9,7 +9,9 @@ use {
         },
     },
     anchor_lang::prelude::*,
-    solana_program::program_error::ProgramError,
+    anchor_spl::token::Token,
+    solana_address_lookup_table_program as saltp,
+    solana_program::{program, program_error::ProgramError, sysvar},
 };
 
 #[derive(Accounts)]
@@ -55,7 +57,27 @@ pub struct Init<'info> {
     )]
     pub launchpad_program_data: Account<'info, ProgramData>,
 
+    /// CHECK: lookup table account
+    #[account(mut)]
+    pub lookup_table: AccountInfo<'info>,
+
+    /// CHECK: account constraints checked in account trait
+    #[account(
+        address = sysvar::slot_hashes::id()
+    )]
+    recent_slothashes: UncheckedAccount<'info>,
+
+    /// CHECK: account constraints checked in account trait
+    #[account(
+        address = sysvar::instructions::id()
+    )]
+    instructions: UncheckedAccount<'info>,
+
+    /// CHECK: lookup table program
+    lookup_table_program: AccountInfo<'info>,
+
     system_program: Program<'info, System>,
+    token_program: Program<'info, Token>,
     // remaining accounts: 1 to Multisig::MAX_SIGNERS admin signers (read-only, unsigned)
 }
 
@@ -72,6 +94,7 @@ pub struct InitParams {
     pub auction_update_fee: u64,
     pub invalid_bid_fee: Fee,
     pub trade_fee: Fee,
+    pub recent_slot: u64,
 }
 
 pub fn init(ctx: Context<Init>, params: &InitParams) -> Result<()> {
@@ -112,8 +135,54 @@ pub fn init(ctx: Context<Init>, params: &InitParams) -> Result<()> {
         .ok_or(ProgramError::InvalidSeeds)?;
 
     if !launchpad.validate() {
-        err!(LaunchpadError::InvalidLaunchpadConfig)
-    } else {
-        Ok(())
+        return err!(LaunchpadError::InvalidLaunchpadConfig);
     }
+
+    // initialize lookup-table
+    let transfer_authority = ctx.accounts.transfer_authority.key();
+    let payer = ctx.accounts.upgrade_authority.key();
+    let (init_table_ix, table_address) =
+        saltp::instruction::create_lookup_table(transfer_authority, payer, params.recent_slot);
+    require_keys_eq!(table_address, ctx.accounts.lookup_table.key());
+    require_keys_eq!(ctx.accounts.lookup_table_program.key(), saltp::ID);
+
+    let authority_seeds: &[&[&[u8]]] =
+        &[&[b"transfer_authority", &[launchpad.transfer_authority_bump]]];
+    program::invoke_signed(
+        &init_table_ix,
+        &[
+            ctx.accounts.lookup_table.to_account_info(),
+            ctx.accounts.transfer_authority.to_account_info(),
+            ctx.accounts.upgrade_authority.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        authority_seeds,
+    )?;
+
+    // add addresses to the lookup table
+    let extend_table_ix = saltp::instruction::extend_lookup_table(
+        table_address,
+        transfer_authority,
+        Some(payer),
+        vec![
+            transfer_authority,
+            ctx.accounts.launchpad.key(),
+            ctx.accounts.recent_slothashes.key(),
+            ctx.accounts.instructions.key(),
+            ctx.accounts.system_program.key(),
+            ctx.accounts.token_program.key(),
+        ],
+    );
+    program::invoke_signed(
+        &extend_table_ix,
+        &[
+            ctx.accounts.lookup_table.to_account_info(),
+            ctx.accounts.transfer_authority.to_account_info(),
+            ctx.accounts.upgrade_authority.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        authority_seeds,
+    )?;
+
+    Ok(())
 }
