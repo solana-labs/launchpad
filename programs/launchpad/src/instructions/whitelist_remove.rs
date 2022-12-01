@@ -10,12 +10,13 @@ use {
 
 #[derive(Accounts)]
 pub struct WhitelistRemove<'info> {
-    #[account()]
+    #[account(mut)]
     pub owner: Signer<'info>,
 
     #[account(
         has_one = owner,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,

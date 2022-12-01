@@ -47,7 +47,8 @@ pub struct PlaceBid<'info> {
 
     #[account(
         mut,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
@@ -56,7 +57,9 @@ pub struct PlaceBid<'info> {
         init_if_needed,
         payer = owner,
         space = SellerBalance::LEN,
-        seeds = [b"seller_balance", auction.owner.as_ref(), payment_custody.key().as_ref()],
+        seeds = [b"seller_balance",
+                 auction.owner.as_ref(),
+                 payment_custody.key().as_ref()],
         bump
     )]
     pub seller_balance: Box<Account<'info, SellerBalance>>,
@@ -65,14 +68,17 @@ pub struct PlaceBid<'info> {
         init_if_needed,
         payer = owner,
         space = Bid::LEN,
-        seeds = [b"bid", owner.key().as_ref(), auction.key().as_ref()],
+        seeds = [b"bid",
+                 owner.key().as_ref(),
+                 auction.key().as_ref()],
         bump
     )]
     pub bid: Box<Account<'info, Bid>>,
 
     #[account(
         constraint = pricing_custody.key() == auction.pricing.custody,
-        seeds = [b"custody", pricing_custody.mint.as_ref()],
+        seeds = [b"custody",
+                 pricing_custody.mint.as_ref()],
         bump = pricing_custody.bump
     )]
     pub pricing_custody: Box<Account<'info, Custody>>,
@@ -85,7 +91,8 @@ pub struct PlaceBid<'info> {
 
     #[account(
         mut,
-        seeds = [b"custody", payment_custody.mint.as_ref()],
+        seeds = [b"custody",
+                 payment_custody.mint.as_ref()],
         bump = payment_custody.bump
     )]
     pub payment_custody: Box<Account<'info, Custody>>,

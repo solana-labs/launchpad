@@ -36,14 +36,17 @@ pub struct RemoveTokens<'info> {
 
     #[account(
         has_one = owner,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
         mut,
-        seeds = [b"dispense", dispensing_custody.mint.as_ref(), auction.key().as_ref()],
+        seeds = [b"dispense",
+                 dispensing_custody.mint.as_ref(),
+                 auction.key().as_ref()],
         bump
     )]
     pub dispensing_custody: Box<Account<'info, TokenAccount>>,

@@ -17,7 +17,8 @@ pub struct GetAuctionAmount<'info> {
     pub launchpad: Box<Account<'info, Launchpad>>,
 
     #[account(
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,

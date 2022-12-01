@@ -23,13 +23,15 @@ pub struct SetTestOraclePrice<'info> {
     pub multisig: AccountLoader<'info, Multisig>,
 
     #[account(
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
-        seeds = [b"custody", custody.mint.as_ref()],
+        seeds = [b"custody",
+                 custody.mint.as_ref()],
         bump = custody.bump
     )]
     pub custody: Box<Account<'info, Custody>>,
@@ -39,7 +41,9 @@ pub struct SetTestOraclePrice<'info> {
         payer = admin,
         space = TestOracle::LEN,
         constraint = oracle_account.key() == custody.oracle_account,
-        seeds = [b"oracle_account", custody.mint.as_ref(), auction.key().as_ref()],
+        seeds = [b"oracle_account",
+                 custody.mint.as_ref(),
+                 auction.key().as_ref()],
         bump
     )]
     pub oracle_account: Box<Account<'info, TestOracle>>,

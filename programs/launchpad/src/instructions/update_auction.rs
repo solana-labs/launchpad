@@ -35,7 +35,8 @@ pub struct UpdateAuction<'info> {
     #[account(
         mut,
         has_one = owner,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,

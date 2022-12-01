@@ -42,7 +42,8 @@ pub struct DeleteAuction<'info> {
 
     #[account(
         mut,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump,
         close = transfer_authority
     )]

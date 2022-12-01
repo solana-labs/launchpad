@@ -44,7 +44,8 @@ pub struct WithdrawFees<'info> {
 
     #[account(
         mut,
-        seeds = [b"custody", custody.mint.key().as_ref()],
+        seeds = [b"custody",
+                 custody.mint.key().as_ref()],
         bump = custody.bump
     )]
     pub custody: Box<Account<'info, Custody>>,

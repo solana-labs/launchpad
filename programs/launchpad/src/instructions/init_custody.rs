@@ -44,7 +44,8 @@ pub struct InitCustody<'info> {
         init_if_needed,
         payer = admin,
         space = Custody::LEN,
-        seeds = [b"custody", custody_token_mint.key().as_ref()],
+        seeds = [b"custody", 
+                 custody_token_mint.key().as_ref()],
         bump
     )]
     pub custody: Box<Account<'info, Custody>>,

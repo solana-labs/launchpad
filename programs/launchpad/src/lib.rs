@@ -1,5 +1,7 @@
 //! Launchpad program entrypoint
 
+#![allow(clippy::result_large_err)]
+
 mod error;
 mod instructions;
 mod math;

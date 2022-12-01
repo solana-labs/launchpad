@@ -32,13 +32,16 @@ pub struct WithdrawFunds<'info> {
 
     #[account(
         mut,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        has_one = owner,
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
-        seeds = [b"custody", custody.mint.as_ref()],
+        seeds = [b"custody",
+                 custody.mint.as_ref()],
         bump = custody.bump
     )]
     pub custody: Box<Account<'info, Custody>>,
@@ -53,7 +56,9 @@ pub struct WithdrawFunds<'info> {
         mut,
         has_one = owner,
         constraint = seller_balance.custody == custody.key(),
-        seeds = [b"seller_balance", auction.owner.as_ref(), seller_balance.custody.as_ref()],
+        seeds = [b"seller_balance",
+                 auction.owner.as_ref(),
+                 seller_balance.custody.as_ref()],
         bump = seller_balance.bump
     )]
     pub seller_balance: Box<Account<'info, SellerBalance>>,

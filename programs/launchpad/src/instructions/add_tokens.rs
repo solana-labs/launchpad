@@ -36,7 +36,8 @@ pub struct AddTokens<'info> {
 
     #[account(
         has_one = owner,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
@@ -49,7 +50,9 @@ pub struct AddTokens<'info> {
         constraint = dispensing_custody_mint.key() == dispensing_custody.mint,
         token::mint = dispensing_custody_mint,
         token::authority = transfer_authority,
-        seeds = [b"dispense", dispensing_custody_mint.key().as_ref(), auction.key().as_ref()],
+        seeds = [b"dispense",
+                 dispensing_custody_mint.key().as_ref(),
+                 auction.key().as_ref()],
         bump
     )]
     pub dispensing_custody: Box<Account<'info, TokenAccount>>,

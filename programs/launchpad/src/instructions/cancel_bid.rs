@@ -14,14 +14,17 @@ pub struct CancelBid<'info> {
     pub initializer: Signer<'info>,
 
     #[account(
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
         mut,
-        seeds = [b"bid", bid.owner.key().as_ref(), auction.key().as_ref()],
+        seeds = [b"bid",
+                 bid.owner.key().as_ref(),
+                 auction.key().as_ref()],
         bump = bid.bump
     )]
     pub bid: Box<Account<'info, Bid>>,

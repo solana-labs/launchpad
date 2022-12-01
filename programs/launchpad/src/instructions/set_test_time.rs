@@ -25,7 +25,8 @@ pub struct SetTestTime<'info> {
 
     #[account(
         mut,
-        seeds = [b"auction", auction.common.name.as_bytes()],
+        seeds = [b"auction",
+                 auction.common.name.as_bytes()],
         bump = auction.bump
     )]
     pub auction: Box<Account<'info, Auction>>,

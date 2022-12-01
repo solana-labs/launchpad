@@ -1144,9 +1144,9 @@ dependencies = [
 
 [[package]]
 name = "pyth-sdk"
-version = "0.4.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f262b88557d8f152a247e1be786a8359d63112fac0a6e49fa41082a8ef789e8d"
+checksum = "9a993cc2b76d9842ee92f00d3104a67d403e8a5a745d2474caf42361b3fc815a"
 dependencies = [
  "borsh",
  "borsh-derive",
@@ -1157,9 +1157,9 @@ dependencies = [
 
 [[package]]
 name = "pyth-sdk-solana"
-version = "0.4.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2aed1a0b714f91cb104cc025eb806782e30aa63c23259724e79efd609294a2c9"
+checksum = "97f071fdeb5129de07a2cb70bb4f3a9e4be1e4cc6b85132bdea0967e601eb757"
 dependencies = [
  "borsh",
  "borsh-derive",
@@ -1683,9 +1683,9 @@ dependencies = [
 
 [[package]]
 name = "solana-security-txt"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f14189df19df7f3977a7ea236ccae6cdc40855ab5baf1ab2796a091ef5c490d1"
+checksum = "73e93d99928eeb25c103033a015667a93ac49c243852270c01a3ea1d61341ab8"
 
 [[package]]
 name = "spl-associated-token-account"

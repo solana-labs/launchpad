@@ -41,13 +41,15 @@ pub struct InitAuction<'info> {
         init,
         payer = owner,
         space = Auction::LEN,
-        seeds = [b"auction", params.common.name.as_bytes()],
+        seeds = [b"auction",
+                 params.common.name.as_bytes()],
         bump
     )]
     pub auction: Box<Account<'info, Auction>>,
 
     #[account(
-        seeds = [b"custody", pricing_custody.mint.as_ref()],
+        seeds = [b"custody",
+                 pricing_custody.mint.as_ref()],
         bump = pricing_custody.bump
     )]
     pub pricing_custody: Box<Account<'info, Custody>>,
